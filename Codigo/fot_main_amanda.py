@@ -792,7 +792,7 @@ def plot_amplificacao_por_data(lista_dados_agrupados, ano_selecionado):
     # Exibe o gráfico
     plt.show()
 
-def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, stations):
+def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, stations, amplificacao_min=None, amplificacao_max=None):
     # Define a paleta de cores para as estações
     cores = ['b', 'g', 'r', 'c', 'm', 'y']
     
@@ -836,7 +836,7 @@ def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, station
     for estacao_nome, dados in dados_por_estacao.items():
         plt.scatter(dados['datas'], dados['amplificacoes'], color=mapa_cores.get(estacao_nome, 'k'), label=estacao_nome)
 
-    # Configurações do gráfico
+       # Configurações do gráfico
     plt.xlabel('Data')
     plt.ylabel('Amplificação')
     plt.title(f'Amplificação por Data de Cada Estação no Ano {ano_selecionado}')
@@ -845,14 +845,32 @@ def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, station
     plt.xticks(rotation=45)
     plt.tight_layout()
     
+    # Definindo os limites do eixo y se especificado
+    if amplificacao_min is not None and amplificacao_max is not None:
+        plt.ylim(amplificacao_min, amplificacao_max)
+    
     # Exibe o gráfico
     plt.show()
 
 
-
-def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
+def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, event_index=0, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
     # Convert the target_date to a datetime object for comparison
     target_date = pd.to_datetime(target_date)
+    
+    # Vector to store possible "Hora" values
+    horas_possiveis = []
+    
+    # Iterate through lista_dados_agrupados to find target_date and possible "Hora" values
+    for data_entry in lista_dados_agrupados:
+        data_date = pd.to_datetime(data_entry["Data"])
+        if data_date == target_date:
+            for station_data in data_entry["Estacoes"]:
+                hora = station_data["Hora"]
+                if hora not in horas_possiveis:
+                    horas_possiveis.append(hora)
+    
+    # Print possible "Hora" values found
+    print(f"Valores possíveis de 'Hora' para a data {target_date}: {horas_possiveis}")
     
     # Prepare subplots
     num_plots = len(target_stations)
@@ -884,42 +902,44 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
                         longitude = station_data["Longitude"]
                         ponto_amp_esq = station_data.get("Amplitude_ponto_esq", None)
                         ponto_amp_dir = station_data.get("Amplitude_ponto_dir", None)
-                        # centro_evento = station_data["Centro_Evento"]
                         
-                        # Plot the data on the corresponding subplot
-                        ax = axes[i]
-                        for campo in campos:
-                            if campo in df.columns:
-                                ax.plot(df["TIME"], df[campo], label=f"{campo} - {estacao}")
+                        # Check if this hora matches the event_index
+                        if hora == horas_possiveis[event_index]:
+                            # Plot the data on the corresponding subplot
+                            ax = axes[i]
+                            for campo in campos:
+                                if campo in df.columns:
+                                    ax.plot(df["TIME"], df[campo], label=f"{campo} - {estacao}")
+                                    
+                            # Plot amplitude_x and amplitude_y as points if data is valid
+                            if ponto_amp_esq is not None and ponto_amp_dir is not None:
+                                ax.scatter(ponto_amp_esq[0], ponto_amp_esq[1], color='red')
+                                ax.scatter(ponto_amp_dir[0], ponto_amp_dir[1], color='blue')
                                 
-                        # Plot amplitude_x and amplitude_y as points if data is valid
-                        if ponto_amp_esq is not None and ponto_amp_dir is not None:
-                            ax.scatter(ponto_amp_esq[0], ponto_amp_esq[1], color='red')
-                            ax.scatter(ponto_amp_dir[0], ponto_amp_dir[1], color='blue')
-                            # ax.scatter(centro_evento[0],centro_evento[1], color='green')
+                            ax.set_xlabel("Time")
+                            ax.set_ylabel("Magnetic Field (nT)")
+                            ax.set_title(f"Magnetic Field Components on {target_date.strftime('%Y-%m-%d')} at {target_station}")
+                            ax.legend()
+                            ax.grid(True)
                             
-                        ax.set_xlabel("Time")
-                        ax.set_ylabel("Magnetic Field (nT)")
-                        ax.set_title(f"Magnetic Field Components on {target_date.strftime('%Y-%m-%d')} at {target_station}")
-                        ax.legend()
-                        ax.grid(True)
-                        
-                        if ver_caracteristicas:
-                            # Fixed text position in the bottom right corner
-                            text_x = 0.95  # X position in axes coordinates
-                            if estacao == target_station:
-                                text_y = 0.8  # Y position for the first station
-                            else:
-                                text_y = 0.35  # Y position for the second station
+                            # Display characteristics if ver_caracteristicas is True
+                            if ver_caracteristicas:
+                                # Fixed text position in the bottom right corner
+                                text_x = 0.95  # X position in axes coordinates
+                                if estacao == target_station:
+                                    text_y = 0.8  # Y position for the first station
+                                else:
+                                    text_y = 0.35  # Y position for the second station
 
-                            ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}", 
-                                    transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
-                                    verticalalignment='top', horizontalalignment='right')
-                        
-                        found_stations.append(estacao)
-                        if len(found_stations) == len(station_pair):
-                            found_both_stations = True
-                            break
+                                ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}", 
+                                        transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
+                                        verticalalignment='top', horizontalalignment='right')
+                            
+                            found_stations.append(estacao)
+                            if len(found_stations) == len(station_pair):
+                                found_both_stations = True
+                                break
+                                
                 if found_both_stations:
                     break
         
@@ -928,7 +948,7 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
             not_found_stations = set(station_pair) - set(found_stations)
             not_found_stations_str = ", ".join(not_found_stations)
             print(f"No data found for date {target_date.strftime('%Y-%m-%d')} and stations: {not_found_stations_str}.")
-
+    
     plt.tight_layout()
     plt.show()
 
@@ -980,30 +1000,31 @@ nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estaco
 
 #%% Plota por ano
 # Anos a serem plotados
-# anos = [2020, 2021, 2022, 2023]
+anos = [2020, 2021, 2022, 2023]
 
-# estacoes_estudadas = 'SMS ASC KDU'
+estacoes_estudadas = 'SMS ASC KDU'
 
-# # Criar uma figura com subplots
-# # fig, axs = plt.subplots(len(anos), 1, figsize=(10, 20))
+# Criar uma figura com subplots
+# fig, axs = plt.subplots(len(anos), 1, figsize=(10, 20))
 
-# # Iterar sobre os anos e gerar os plots
-# for i, ano in enumerate(anos):
-#     # plt.sca(axs[i])  # Definir o subplot atual como o ativo
-#     plot_amplificacao_por_dataV2(nova_lista_dados_agrupados, ano, estacoes_estudadas)
-#     # axs[i].set_title(f"Ano {ano}")
+# Iterar sobre os anos e gerar os plots
+for i, ano in enumerate(anos):
+    # plt.sca(axs[i])  # Definir o subplot atual como o ativo
+    plot_amplificacao_por_dataV2(nova_lista_dados_agrupados, ano, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
+    # axs[i].set_title(f"Ano {ano}")
 
-# # Ajustar layout
-# plt.tight_layout()
+# Ajustar layout
+plt.tight_layout()
 
-# # Mostrar a figura
-# plt.show()
+# Mostrar a figura
+plt.show()
 
+plot_amplificacao_por_dataV3(nova_lista_dados_agrupados, anos, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
 
 # %% plota detalhes estação, conjugada, data
 target_date = event_dates["Data"][51]
-target_station = ['SMS', 'ASC', 'KDU']
-# target_station = ['SMS']
+# target_station = ['SMS', 'ASC', 'KDU']
+target_station = ['SMS']
 # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
 # campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
 # campos = ["H_nT"]  # Lista de campos a serem plotados
@@ -1011,4 +1032,6 @@ campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
 # plot_data_conjugadas(nova_lista_dados_agrupados, target_date, target_station,estacoes_conjugadas,campos)
 
-plot_data_conjugadas(nova_lista_dados_agrupados, '2023-07-20', target_station,estacoes_conjugadas,campos,False)
+plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=1, campos=campos, ver_caracteristicas=True)
+#%%
+plt.close('all')
