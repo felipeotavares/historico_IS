@@ -18,6 +18,9 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from scipy.signal import butter, filtfilt
+from scipy.optimize import curve_fit
+from scipy.optimize import OptimizeWarning
+import warnings
 
 # %% infos
 stations_info = {
@@ -314,7 +317,7 @@ def get_date_selection(diretorio_base):
             for nome_arquivo in os.listdir(caminho_pasta):
                 caminho_arquivo = os.path.join(caminho_pasta, nome_arquivo)
                 
-                if os.path.isfile(caminho_arquivo):
+                if os.path.isfile(caminho_arquivo) and not caminho_arquivo.endswith('.ini'):
                     df, estacao = process_data(caminho_arquivo)
                     city, lat, lon = stations_info[estacao]['city'], round(stations_info[estacao]['lat'], 1), round(stations_info[estacao]['lon'], 1)
                     dados_estacoes.append({
@@ -383,6 +386,8 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                             
                             # Verificando se a janela tem tamanho suficiente
                             if fim_janela - inicio_janela + 1 >= 20:
+                                display(estacao)
+                                display(data)
                                 # Extraindo a janela de dados
                                 dados_janela = dados_estacao.iloc[inicio_janela:fim_janela + 1]
                                 # Filtro passabaixa
@@ -390,11 +395,12 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 dados_janela['H_nT_movmean'] = dados_janela['H_nT'].rolling(window=5, center=True).mean()
                                 # Calculando derivada de H filtrado
                                 dados_janela['dH_nT_movmean'] = dados_janela['H_nT_movmean'].diff()
-
+                                # calculo funcao sigmoid
+                                dados_janela['H_nT_ajuste'], amplitude, amp_ponto_esq, amp_ponto_dir = caract_ajuste(dados_janela, 'H_nT_movmean')
                                 # Extraindo amplitude 
-                                display(estacao)
-                                display(data)
-                                amplitude,amp_ponto_esq,amp_ponto_dir = caract_amplitudeV2(dados_janela,'dH_nT_movmean','H_nT_movmean')
+                                
+                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela,'dH_nT_movmean','H_nT_movmean')
+                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
 
                             # Adicionando os dados à lista de dados por data
                             dados_por_data.append({
@@ -404,8 +410,8 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 'Amplitude': amplitude,
                                 'Amplitude_ponto_esq': amp_ponto_esq,
                                 'Amplitude_ponto_dir': amp_ponto_dir,
-                                'Latitude':caract_latitude(estacao, stations_info),
-                                'Longitude':caract_longitude(estacao, stations_info)
+                                'Latitude': caract_latitude(estacao, stations_info),
+                                'Longitude': caract_longitude(estacao, stations_info)
                             })
 
         # Adicionando os dados por data à lista agrupada
@@ -415,6 +421,7 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
         })
     
     return lista_dados_agrupados
+
 
 # %% tools
 # Função para converter HH:MM:SS.000 para decimal entre 0 e 24
@@ -435,6 +442,56 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
     return y
 
 # %% caracteristicas extrator
+# Função sigmoide
+def sigmoid(x, L, x0, k, b):
+    return L / (1 + np.exp(-k * (x - x0))) + b
+
+
+def caract_ajuste(dados_janela, coluna):
+    x_data = np.arange(len(dados_janela))
+    y_data = dados_janela[coluna].values
+
+    # Preencher NaNs com interpolação linear
+    y_data = pd.Series(y_data).interpolate().ffill().bfill().values
+
+    # Remover infs
+    mask = ~np.isinf(y_data)
+    x_data = x_data[mask]
+    y_data = y_data[mask]
+
+    # Verificar se temos dados suficientes após remover infs e NaNs
+    if len(x_data) < 2 or np.isnan(y_data).all():
+        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan]
+
+    # Chute inicial para os parâmetros
+    p0 = [max(y_data), np.median(x_data), 1, min(y_data)]
+
+    # Ajuste da curva sigmoide com tratamento de exceção
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', OptimizeWarning)
+            params, _ = curve_fit(sigmoid, x_data, y_data, p0, method='dogbox', maxfev=10000)
+        L, x0, k, b = params
+
+        # Curva ajustada
+        y_fit = sigmoid(np.arange(len(dados_janela)), L, x0, k, b)
+
+        # Valores máximo e mínimo na curva ajustada
+        max_idx = np.argmax(y_fit)
+        min_idx = np.argmin(y_fit)
+
+        # Posições dos valores à esquerda e à direita
+        posicao_esquerda = dados_janela.iloc[min_idx]['TIME']
+        posicao_direita = dados_janela.iloc[max_idx]['TIME']
+
+        ponto_esquerda = [posicao_esquerda, y_fit[min_idx]]
+        ponto_direita = [posicao_direita, y_fit[max_idx]]
+
+    except (RuntimeError, ValueError):
+        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan]
+
+    return y_fit, L, ponto_esquerda, ponto_direita
+
 def filtro_passa_baixa(data,cutoff_frequency, sampling_frequency, order=5):
     """
     Calcula a derivada de uma coluna do DataFrame e aplica um filtro passa-baixa.
@@ -586,6 +643,46 @@ def caract_amplitudeV3(dados_janela, campo_indices='dH_nT_movmean', campo_valor=
 
     ponto_esquerda = [posicao_esquerda, valor_esq]
     ponto_direita = [posicao_direita, valor_dir]
+
+    return round(diferenca, 3), ponto_esquerda, ponto_direita
+
+def caract_amplitudeV4(dados_janela, campo_indices='dH_nT_movmean', campo_valor='H_nT_movmean'):
+    # Substituir NaN pelos valores da vizinhança
+    dados_janela[campo_indices] = dados_janela[campo_indices].ffill().bfill()
+
+    # Verificar se há valores NaN ou NoneType no campo especificado após a substituição
+    if dados_janela[campo_indices].isnull().any() or dados_janela[campo_indices].isna().any():
+        print(f"Há valores NaN ou NoneType em '{campo_indices}' após substituição pelos valores da vizinhança.")
+        return None, None, None  # ou faça algum tratamento adequado
+
+    # Encontrar índice do centro dos dados
+    centro = len(dados_janela) // 2
+
+    # Encontrar índice do menor valor à esquerda do centro
+    dados_esquerda = dados_janela.iloc[:centro]
+    if dados_esquerda.empty:
+        print(f"Não há dados à esquerda do centro para '{campo_indices}'.")
+        return None, None, None
+    indice_min_esq = dados_esquerda[campo_indices].idxmin()
+
+    # Encontrar índice do maior valor à direita do centro
+    dados_direita = dados_janela.iloc[centro:]
+    if dados_direita.empty:
+        print(f"Não há dados à direita do centro para '{campo_indices}'.")
+        return None, None, None
+    indice_max_dir = dados_direita[campo_indices].idxmax()
+
+    valor_min_esq = dados_janela.loc[indice_min_esq, campo_valor]
+    valor_max_dir = dados_janela.loc[indice_max_dir, campo_valor]
+
+    # Posições dos valores à esquerda e à direita
+    posicao_esquerda = dados_janela.loc[indice_min_esq, 'TIME']
+    posicao_direita = dados_janela.loc[indice_max_dir, 'TIME']
+
+    diferenca = valor_max_dir - valor_min_esq
+
+    ponto_esquerda = [posicao_esquerda, valor_min_esq]
+    ponto_direita = [posicao_direita, valor_max_dir]
 
     return round(diferenca, 3), ponto_esquerda, ponto_direita
 
@@ -753,7 +850,7 @@ def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, station
 
 
 
-def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, campos=["H_nT", "D_nT"]):
+def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
     # Convert the target_date to a datetime object for comparison
     target_date = pd.to_datetime(target_date)
     
@@ -807,16 +904,17 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
                         ax.legend()
                         ax.grid(True)
                         
-                        # Fixed text position in the bottom right corner
-                        text_x = 0.95  # X position in axes coordinates
-                        if estacao == target_station:
-                            text_y = 0.8  # Y position for the first station
-                        else:
-                            text_y = 0.35  # Y position for the second station
+                        if ver_caracteristicas:
+                            # Fixed text position in the bottom right corner
+                            text_x = 0.95  # X position in axes coordinates
+                            if estacao == target_station:
+                                text_y = 0.8  # Y position for the first station
+                            else:
+                                text_y = 0.35  # Y position for the second station
 
-                        ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}", 
-                                transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
-                                verticalalignment='top', horizontalalignment='right')
+                            ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}", 
+                                    transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
+                                    verticalalignment='top', horizontalalignment='right')
                         
                         found_stations.append(estacao)
                         if len(found_stations) == len(station_pair):
@@ -882,37 +980,35 @@ nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estaco
 
 #%% Plota por ano
 # Anos a serem plotados
-anos = [2020, 2021, 2022, 2023]
+# anos = [2020, 2021, 2022, 2023]
 
-estacoes_estudadas = 'SMS ASC KDU'
+# estacoes_estudadas = 'SMS ASC KDU'
 
-# Criar uma figura com subplots
-# fig, axs = plt.subplots(len(anos), 1, figsize=(10, 20))
+# # Criar uma figura com subplots
+# # fig, axs = plt.subplots(len(anos), 1, figsize=(10, 20))
 
-# Iterar sobre os anos e gerar os plots
-for i, ano in enumerate(anos):
-    # plt.sca(axs[i])  # Definir o subplot atual como o ativo
-    plot_amplificacao_por_dataV2(nova_lista_dados_agrupados, ano, estacoes_estudadas)
-    # axs[i].set_title(f"Ano {ano}")
+# # Iterar sobre os anos e gerar os plots
+# for i, ano in enumerate(anos):
+#     # plt.sca(axs[i])  # Definir o subplot atual como o ativo
+#     plot_amplificacao_por_dataV2(nova_lista_dados_agrupados, ano, estacoes_estudadas)
+#     # axs[i].set_title(f"Ano {ano}")
 
-# Ajustar layout
-plt.tight_layout()
+# # Ajustar layout
+# plt.tight_layout()
 
-# Mostrar a figura
-plt.show()
+# # Mostrar a figura
+# plt.show()
 
 
 # %% plota detalhes estação, conjugada, data
-
-
-target_date = event_dates["Data"][56]
+target_date = event_dates["Data"][51]
 target_station = ['SMS', 'ASC', 'KDU']
 # target_station = ['SMS']
 # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
-campos = ["H_nT","H_nT_movmean"]  # Lista de campos a serem plotados
-campos = ["H_nT"]  # Lista de campos a serem plotados
+# campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
+# campos = ["H_nT"]  # Lista de campos a serem plotados
+campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
+# plot_data_conjugadas(nova_lista_dados_agrupados, target_date, target_station,estacoes_conjugadas,campos)
 
-plot_data_conjugadas(nova_lista_dados_agrupados, target_date, target_station,estacoes_conjugadas,campos)
-
-plot_data_conjugadas(nova_lista_dados_agrupados, '2023-10-18', target_station,estacoes_conjugadas,campos)
+plot_data_conjugadas(nova_lista_dados_agrupados, '2023-07-20', target_station,estacoes_conjugadas,campos,False)
