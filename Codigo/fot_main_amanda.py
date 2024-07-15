@@ -21,6 +21,7 @@ from scipy.signal import butter, filtfilt
 from scipy.optimize import curve_fit
 from scipy.optimize import OptimizeWarning
 import warnings
+from matplotlib.dates import DateFormatter, DayLocator
 
 # %% infos
 stations_info = {
@@ -105,44 +106,6 @@ def process_data(file_path):
 
     df['dH_nT'] = df['H_nT'].diff()
     return df[['TIME', 'H_nT', 'dH_nT']], station_name
-
-# %% 
-def read_data_eventos(filename):
-    
-    column_names = [
-        'DATE', 'TIME', 'DOY', 'MDUR', 'MAMP', 'CODES', 'TYPE',
-        'OBSERVATORIES', 'DURATION', 'AMPLITUDE'
-    ]
-    data = []
-    with open(filename, 'r') as file:
-        reader = csv.reader(file, delimiter=' ', skipinitialspace=True)
-        for _ in range(27):
-            next(reader)
-        
-        for row in reader:
-            if len(row) < 26:
-                continue
-            date, time, doy, mdur, mamp = row[:5]
-            try:
-                doy = int(doy)
-                mdur, mamp = float(mdur), float(mamp)
-            except ValueError:
-                continue
-            
-            codes, event_type = row[5:10], row[10]
-            observatories, durations, amplitudes = row[11:16], row[16:21], row[21:26]
-            data.append([date, time, doy, mdur, mamp, codes, event_type, observatories, durations, amplitudes])
-
-    df = pd.DataFrame(data, columns=column_names)
-    for col, cols in zip(['CODES', 'OBSERVATORIES', 'DURATION', 'AMPLITUDE'], 
-                         [['CODES_1', 'CODES_2', 'CODES_3', 'CODES_4', 'CODES_5'],
-                          ['OBSERVATORY_1', 'OBSERVATORY_2', 'OBSERVATORY_3', 'OBSERVATORY_4', 'OBSERVATORY_5'],
-                          ['DURATION_1', 'DURATION_2', 'DURATION_3', 'DURATION_4', 'DURATION_5'],
-                          ['AMPLITUDE_1', 'AMPLITUDE_2', 'AMPLITUDE_3', 'AMPLITUDE_4', 'AMPLITUDE_5']]):
-        df[cols] = pd.DataFrame(df[col].tolist(), index=df.index)
-        df.drop(columns=[col], inplace=True)
-
-    return df
 
 # %% Data download -não esta retornando os arquivos corretos, url pode estar errada
 def download_sc_dates(years, save_folder):
@@ -268,13 +231,61 @@ def download_files(files_folder, dates, stations):
                 os.makedirs(folder_save)
             
             if local == 'Embrace':
-                download_embrace(files_folder, date_str, station)
+                # Verifica se o arquivo já existe antes de baixar
+                file_name = f'{station.lower()}{date.strftime("%Y%m%d")}.min'
+                local_file_path = os.path.join(folder_save, file_name)
+                if os.path.exists(local_file_path):
+                    print(f"[{file_name}] Already on disk")
+                else:
+                    download_embrace(files_folder, date_str, station)
             elif local == 'Intermag':
-                intermagnet_download(files_folder, date_str, station)
+                # Verifica se o arquivo já existe antes de baixar
+                file_name = f'{station.lower()}{date.strftime("%Y%m%d")}vmin.min'
+                local_file_path = os.path.join(folder_save, file_name)
+                if os.path.exists(local_file_path):
+                    print(f"[{file_name}] Already on disk")
+                else:
+                    intermagnet_download(files_folder, date_str, station)
 
 
 
 # %% Data selection
+def read_data_eventos(filename):
+    
+    column_names = [
+        'DATE', 'TIME', 'DOY', 'MDUR', 'MAMP', 'CODES', 'TYPE',
+        'OBSERVATORIES', 'DURATION', 'AMPLITUDE'
+    ]
+    data = []
+    with open(filename, 'r') as file:
+        reader = csv.reader(file, delimiter=' ', skipinitialspace=True)
+        for _ in range(27):
+            next(reader)
+        
+        for row in reader:
+            if len(row) < 26:
+                continue
+            date, time, doy, mdur, mamp = row[:5]
+            try:
+                doy = int(doy)
+                mdur, mamp = float(mdur), float(mamp)
+            except ValueError:
+                continue
+            
+            codes, event_type = row[5:10], row[10]
+            observatories, durations, amplitudes = row[11:16], row[16:21], row[21:26]
+            data.append([date, time, doy, mdur, mamp, codes, event_type, observatories, durations, amplitudes])
+
+    df = pd.DataFrame(data, columns=column_names)
+    for col, cols in zip(['CODES', 'OBSERVATORIES', 'DURATION', 'AMPLITUDE'], 
+                         [['CODES_1', 'CODES_2', 'CODES_3', 'CODES_4', 'CODES_5'],
+                          ['OBSERVATORY_1', 'OBSERVATORY_2', 'OBSERVATORY_3', 'OBSERVATORY_4', 'OBSERVATORY_5'],
+                          ['DURATION_1', 'DURATION_2', 'DURATION_3', 'DURATION_4', 'DURATION_5'],
+                          ['AMPLITUDE_1', 'AMPLITUDE_2', 'AMPLITUDE_3', 'AMPLITUDE_4', 'AMPLITUDE_5']]):
+        df[cols] = pd.DataFrame(df[col].tolist(), index=df.index)
+        df.drop(columns=[col], inplace=True)
+
+    return df
 def get_events_dates(folder):
     """
     Lê arquivos de eventos de uma pasta e retorna uma lista de datas únicas com horas convertidas para decimal.
@@ -386,6 +397,9 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                             
                             # Verificando se a janela tem tamanho suficiente
                             if fim_janela - inicio_janela + 1 >= 20:
+                                #verbose
+                                # display(estacao)
+                                # display(data)
                                 # Extraindo a janela de dados
                                 dados_janela = dados_estacao.iloc[inicio_janela:fim_janela + 1]
                                 # Filtro passabaixa
@@ -396,8 +410,6 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 # Calculo função sigmoid
                                 dados_janela['H_nT_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_ajuste(dados_janela, 'H_nT_movmean')
                                 # Extraindo amplitude 
-                                display(estacao)
-                                display(data)
                                 # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela, 'dH_nT_movmean', 'H_nT_movmean')
                                 amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
 
@@ -756,118 +768,7 @@ def calcular_amplificacao(lista_dados_agrupados, estacoes_conjugadas):
     
     return nova_lista_dados_agrupados
 # %% Plot data
-def plot_amplificacao_por_data(lista_dados_agrupados, ano_selecionado):
-    # Define a paleta de cores para as 6 estações
-    cores = ['b', 'g', 'r', 'c', 'm', 'y']
-    
-    # Mapa de cores para estações
-    mapa_cores = {}
-    
-    # Dicionário para armazenar os dados por estação
-    dados_por_estacao = {}
-
-    # plt.figure(figsize=(10, 6))
-    
-    # Itera sobre a lista de dados agrupados
-    for dados_agrupados in lista_dados_agrupados:
-        data = dados_agrupados['Data']
-        ano = int(data.split('-')[0])
-        
-        if ano == ano_selecionado:
-            estacoes = dados_agrupados['Estacoes']
-            
-            for estacao in estacoes:
-                estacao_nome = estacao['Estacao']
-                
-                if estacao_nome not in mapa_cores:
-                    mapa_cores[estacao_nome] = cores[len(mapa_cores) % len(cores)]
-                
-                amplificacao = estacao.get('Amplificacao', None)
-                
-                if amplificacao is not None and not pd.isnull(amplificacao):
-                    if estacao_nome not in dados_por_estacao:
-                        dados_por_estacao[estacao_nome] = {'datas': [], 'amplificacoes': []}
-                    
-                    dados_por_estacao[estacao_nome]['datas'].append(data)
-                    dados_por_estacao[estacao_nome]['amplificacoes'].append(amplificacao)
-
-    # Plotagem dos dados acumulados por estação
-    for estacao_nome, dados in dados_por_estacao.items():
-        plt.scatter(dados['datas'], dados['amplificacoes'], color=mapa_cores[estacao_nome], label=estacao_nome)
-
-    # Configurações do gráfico
-    plt.xlabel('Data')
-    plt.ylabel('Amplificação')
-    plt.title(f'Amplificação por Data de Cada Estação no Ano {ano_selecionado}')
-    plt.legend()
-    plt.grid(True)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    
-    # Exibe o gráfico
-    plt.show()
-
-def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, stations, amplificacao_min=None, amplificacao_max=None):
-    # Define a paleta de cores para as estações
-    cores = ['b', 'g', 'r', 'c', 'm', 'y']
-    
-    # Mapa de cores para estações
-    mapa_cores = {}
-    
-    # Dicionário para armazenar os dados por estação
-    dados_por_estacao = {}
-    
-    # Converte a string de estações para uma lista
-    estações_selecionadas = stations.split()
-    
-    plt.figure(figsize=(10, 6))
-    
-    # Itera sobre a lista de dados agrupados
-    for dados_agrupados in lista_dados_agrupados:
-        data = dados_agrupados['Data']
-        ano = int(data.split('-')[0])
-        
-        if ano == ano_selecionado:
-            estacoes = dados_agrupados.get('Estacoes', [])  # Lidando com o caso de não haver 'Estacoes' definido
-            
-            for estacao in estacoes:
-                estacao_nome = estacao['Estacao']
-                
-                # Verifica se a estação está na lista de estações selecionadas
-                if estacao_nome in estações_selecionadas:
-                    if estacao_nome not in mapa_cores:
-                        mapa_cores[estacao_nome] = cores[len(mapa_cores) % len(cores)]
-                    
-                    amplificacao = estacao.get('Amplificacao')  # 'Amplificacao' deve existir, não precisa verificar por None
-                    
-                    if not pd.isnull(amplificacao):
-                        if estacao_nome not in dados_por_estacao:
-                            dados_por_estacao[estacao_nome] = {'datas': [], 'amplificacoes': []}
-                        
-                        dados_por_estacao[estacao_nome]['datas'].append(data)
-                        dados_por_estacao[estacao_nome]['amplificacoes'].append(amplificacao)
-
-    # Plotagem dos dados acumulados por estação
-    for estacao_nome, dados in dados_por_estacao.items():
-        plt.scatter(dados['datas'], dados['amplificacoes'], color=mapa_cores.get(estacao_nome, 'k'), label=estacao_nome)
-
-       # Configurações do gráfico
-    plt.xlabel('Data')
-    plt.ylabel('Amplificação')
-    plt.title(f'Amplificação por Data de Cada Estação no Ano {ano_selecionado}')
-    plt.legend()
-    plt.grid(True)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    
-    # Definindo os limites do eixo y se especificado
-    if amplificacao_min is not None and amplificacao_max is not None:
-        plt.ylim(amplificacao_min, amplificacao_max)
-    
-    # Exibe o gráfico
-    plt.show()
-
-def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stations, amplificacao_min=None, amplificacao_max=None):
+def plot_amplificacao_por_data(lista_dados_agrupados, anos_selecionados, stations, amplificacao_min=None, amplificacao_max=None):
     # Define a paleta de cores para as estações
     cores = ['b', 'g', 'r', 'c', 'm', 'y']
     
@@ -884,12 +785,12 @@ def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stati
     total_estacoes = 0
     estacoes_destacadas = 0
     
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 6))  # Ajustei o tamanho do gráfico para melhor visualização
     
     # Itera sobre a lista de dados agrupados
     for dados_agrupados in lista_dados_agrupados:
-        data = dados_agrupados['Data']
-        ano = int(data.split('-')[0])
+        data = pd.to_datetime(dados_agrupados['Data'])  # Converte a data para datetime
+        ano = data.year
         
         if ano in anos_selecionados:
             estacoes = dados_agrupados.get('Estacoes', [])  # Lidando com o caso de não haver 'Estacoes' definido
@@ -914,15 +815,15 @@ def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stati
                         dados_por_estacao[estacao_nome]['r_squared'].append(r_squared)
                         
                         total_estacoes += 1
-                        if r_squared > 0.8:
+                        if r_squared > 0.9:
                             estacoes_destacadas += 1
 
     # Plotagem dos dados acumulados por estação
     for estacao_nome, dados in dados_por_estacao.items():
         # Marca os pontos com R_squared > 0.9
         plt.scatter(dados['datas'], dados['amplificacoes'], color=mapa_cores.get(estacao_nome, 'k'), label=None)
-        plt.scatter([dados['datas'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.8],
-                    [dados['amplificacoes'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.8],
+        plt.scatter([dados['datas'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.9],
+                    [dados['amplificacoes'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.9],
                     color=mapa_cores.get(estacao_nome, 'k'), marker='o', s=100, edgecolor='black', linewidth=1.5, label=None)
 
     # Calcula a porcentagem de estações destacadas
@@ -946,7 +847,16 @@ def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stati
     plt.legend(handles, labels, loc='best')
     
     plt.grid(True)
+    
+    # Formatação do eixo x para mostrar dia, mês e ano
+    date_format = DateFormatter('%d-%m-%Y')
+    plt.gca().xaxis.set_major_formatter(date_format)
+    
+    # Ajuste dos intervalos dos ticks para mostrar mais datas
+    plt.gca().xaxis.set_major_locator(DayLocator(interval=30))  # Intervalo de 7 dias
+    
     plt.xticks(rotation=45)
+    
     plt.tight_layout()
     
     # Definindo os limites do eixo y se especificado
@@ -955,7 +865,7 @@ def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stati
     
     # Exibe o gráfico
     plt.show()
-    
+        
 def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, event_index=0, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
     # Convert the target_date to a datetime object for comparison
     target_date = pd.to_datetime(target_date)
@@ -1094,10 +1004,10 @@ estacoes_conjugadas = {
     'KDU': 'KNY'
 }
 
-# download_files(files_folder, event_dates['Data'], stations)
+download_files(files_folder, event_dates['Data'], stations)
 files_by_date = get_date_selection(os.path.join(files_folder, 'Dados'))
 
-janela = 50
+janela = 30
 lista_dados_agrupados = processa_dados_estacoes(files_by_date, event_dates, janela,estacoes_conjugadas)
 
 nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estacoes_conjugadas)
@@ -1105,38 +1015,20 @@ nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estaco
 
 #%% Plota por ano
 # Anos a serem plotados
-anos = [2020, 2021, 2022, 2023]
-
+anos = [2019, 2020, 2021, 2022, 2023,2024]
 estacoes_estudadas = 'SMS ASC KDU'
 
-# Criar uma figura com subplots
-# fig, axs = plt.subplots(len(anos), 1, figsize=(10, 20))
-
-# Iterar sobre os anos e gerar os plots
-for i, ano in enumerate(anos):
-    # plt.sca(axs[i])  # Definir o subplot atual como o ativo
-    plot_amplificacao_por_dataV2(nova_lista_dados_agrupados, ano, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
-    # axs[i].set_title(f"Ano {ano}")
-
-# Ajustar layout
-plt.tight_layout()
-
-# Mostrar a figura
-plt.show()
-
-plot_amplificacao_por_dataV3(nova_lista_dados_agrupados, anos, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
+plot_amplificacao_por_data(nova_lista_dados_agrupados, anos, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
 
 # %% plota detalhes estação, conjugada, data
 target_date = event_dates["Data"][51]
 # target_station = ['SMS', 'ASC', 'KDU']
-target_station = ['SJG']
+target_station = ['SMS']
 # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
 # campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
 # campos = ["H_nT"]  # Lista de campos a serem plotados
 campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
-# plot_data_conjugadas(nova_lista_dados_agrupados, target_date, target_station,estacoes_conjugadas,campos)
-
 plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
 #%%
-plt.close('all')
+# plt.close('all')
