@@ -386,8 +386,6 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                             
                             # Verificando se a janela tem tamanho suficiente
                             if fim_janela - inicio_janela + 1 >= 20:
-                                display(estacao)
-                                display(data)
                                 # Extraindo a janela de dados
                                 dados_janela = dados_estacao.iloc[inicio_janela:fim_janela + 1]
                                 # Filtro passabaixa
@@ -395,12 +393,13 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 dados_janela['H_nT_movmean'] = dados_janela['H_nT'].rolling(window=5, center=True).mean()
                                 # Calculando derivada de H filtrado
                                 dados_janela['dH_nT_movmean'] = dados_janela['H_nT_movmean'].diff()
-                                # calculo funcao sigmoid
-                                dados_janela['H_nT_ajuste'], amplitude, amp_ponto_esq, amp_ponto_dir = caract_ajuste(dados_janela, 'H_nT_movmean')
+                                # Calculo função sigmoid
+                                dados_janela['H_nT_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_ajuste(dados_janela, 'H_nT_movmean')
                                 # Extraindo amplitude 
-                                
-                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela,'dH_nT_movmean','H_nT_movmean')
-                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
+                                display(estacao)
+                                display(data)
+                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela, 'dH_nT_movmean', 'H_nT_movmean')
+                                amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
 
                             # Adicionando os dados à lista de dados por data
                             dados_por_data.append({
@@ -411,7 +410,12 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 'Amplitude_ponto_esq': amp_ponto_esq,
                                 'Amplitude_ponto_dir': amp_ponto_dir,
                                 'Latitude': caract_latitude(estacao, stations_info),
-                                'Longitude': caract_longitude(estacao, stations_info)
+                                'Longitude': caract_longitude(estacao, stations_info),
+                                'Ponto_Esquerda': ponto_esquerda,
+                                'Ponto_Direita': ponto_direita,
+                                'Residual': residual,
+                                'R_squared': r_squared,
+                                'RMSE': rmse
                             })
 
         # Adicionando os dados por data à lista agrupada
@@ -421,6 +425,7 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
         })
     
     return lista_dados_agrupados
+
 
 
 # %% tools
@@ -446,7 +451,6 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
 def sigmoid(x, L, x0, k, b):
     return L / (1 + np.exp(-k * (x - x0))) + b
 
-
 def caract_ajuste(dados_janela, coluna):
     x_data = np.arange(len(dados_janela))
     y_data = dados_janela[coluna].values
@@ -461,7 +465,7 @@ def caract_ajuste(dados_janela, coluna):
 
     # Verificar se temos dados suficientes após remover infs e NaNs
     if len(x_data) < 2 or np.isnan(y_data).all():
-        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan]
+        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
 
     # Chute inicial para os parâmetros
     p0 = [max(y_data), np.median(x_data), 1, min(y_data)]
@@ -487,10 +491,21 @@ def caract_ajuste(dados_janela, coluna):
         ponto_esquerda = [posicao_esquerda, y_fit[min_idx]]
         ponto_direita = [posicao_direita, y_fit[max_idx]]
 
-    except (RuntimeError, ValueError):
-        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan]
+        # Cálculo do resíduo
+        residual = np.sum((y_data - sigmoid(x_data, *params))**2)
 
-    return y_fit, L, ponto_esquerda, ponto_direita
+        # Cálculo do R²
+        ss_res = np.sum((y_data - y_fit)**2)
+        ss_tot = np.sum((y_data - np.mean(y_data))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+
+        # Cálculo do RMSE
+        rmse = np.sqrt(np.mean((y_data - y_fit)**2))
+
+    except (RuntimeError, ValueError):
+        return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    return y_fit, L, ponto_esquerda, ponto_direita, residual, r_squared, rmse
 
 def filtro_passa_baixa(data,cutoff_frequency, sampling_frequency, order=5):
     """
@@ -852,7 +867,95 @@ def plot_amplificacao_por_dataV2(lista_dados_agrupados, ano_selecionado, station
     # Exibe o gráfico
     plt.show()
 
+def plot_amplificacao_por_dataV3(lista_dados_agrupados, anos_selecionados, stations, amplificacao_min=None, amplificacao_max=None):
+    # Define a paleta de cores para as estações
+    cores = ['b', 'g', 'r', 'c', 'm', 'y']
+    
+    # Mapa de cores para estações
+    mapa_cores = {}
+    
+    # Dicionário para armazenar os dados por estação
+    dados_por_estacao = {}
+    
+    # Converte a string de estações para uma lista
+    estações_selecionadas = stations.split()
+    
+    # Contadores para estações destacadas e total de estações
+    total_estacoes = 0
+    estacoes_destacadas = 0
+    
+    plt.figure(figsize=(10, 6))
+    
+    # Itera sobre a lista de dados agrupados
+    for dados_agrupados in lista_dados_agrupados:
+        data = dados_agrupados['Data']
+        ano = int(data.split('-')[0])
+        
+        if ano in anos_selecionados:
+            estacoes = dados_agrupados.get('Estacoes', [])  # Lidando com o caso de não haver 'Estacoes' definido
+            
+            for estacao in estacoes:
+                estacao_nome = estacao['Estacao']
+                
+                # Verifica se a estação está na lista de estações selecionadas
+                if estacao_nome in estações_selecionadas:
+                    if estacao_nome not in mapa_cores:
+                        mapa_cores[estacao_nome] = cores[len(mapa_cores) % len(cores)]
+                    
+                    amplificacao = estacao.get('Amplificacao')  # 'Amplificacao' deve existir, não precisa verificar por None
+                    r_squared = estacao.get('R_squared')  # Verifica R_squared
+                    
+                    if not pd.isnull(amplificacao) and not pd.isnull(r_squared):
+                        if estacao_nome not in dados_por_estacao:
+                            dados_por_estacao[estacao_nome] = {'datas': [], 'amplificacoes': [], 'r_squared': []}
+                        
+                        dados_por_estacao[estacao_nome]['datas'].append(data)
+                        dados_por_estacao[estacao_nome]['amplificacoes'].append(amplificacao)
+                        dados_por_estacao[estacao_nome]['r_squared'].append(r_squared)
+                        
+                        total_estacoes += 1
+                        if r_squared > 0.8:
+                            estacoes_destacadas += 1
 
+    # Plotagem dos dados acumulados por estação
+    for estacao_nome, dados in dados_por_estacao.items():
+        # Marca os pontos com R_squared > 0.9
+        plt.scatter(dados['datas'], dados['amplificacoes'], color=mapa_cores.get(estacao_nome, 'k'), label=None)
+        plt.scatter([dados['datas'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.8],
+                    [dados['amplificacoes'][i] for i in range(len(dados['r_squared'])) if dados['r_squared'][i] > 0.8],
+                    color=mapa_cores.get(estacao_nome, 'k'), marker='o', s=100, edgecolor='black', linewidth=1.5, label=None)
+
+    # Calcula a porcentagem de estações destacadas
+    if total_estacoes > 0:
+        percent_destacadas = (estacoes_destacadas / total_estacoes) * 100
+    else:
+        percent_destacadas = 0.0
+    
+    # Configurações do gráfico
+    plt.xlabel('Data')
+    plt.ylabel('Amplificação')
+    plt.title(f'Amplificação por Data de Cada Estação nos Anos {", ".join(map(str, anos_selecionados))} ({percent_destacadas:.1f}% destacadas)')
+    
+    # Criação da legenda única
+    handles = []
+    labels = []
+    for estacao_nome in dados_por_estacao:
+        handles.append(plt.scatter([], [], color=mapa_cores.get(estacao_nome, 'k')))
+        labels.append(estacao_nome)
+    
+    plt.legend(handles, labels, loc='best')
+    
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Definindo os limites do eixo y se especificado
+    if amplificacao_min is not None and amplificacao_max is not None:
+        plt.ylim(amplificacao_min, amplificacao_max)
+    
+    # Exibe o gráfico
+    plt.show()
+    
 def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, event_index=0, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
     # Convert the target_date to a datetime object for comparison
     target_date = pd.to_datetime(target_date)
@@ -902,6 +1005,8 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
                         longitude = station_data["Longitude"]
                         ponto_amp_esq = station_data.get("Amplitude_ponto_esq", None)
                         ponto_amp_dir = station_data.get("Amplitude_ponto_dir", None)
+                        r_squared = station_data["R_squared"]
+                        rmse = station_data["RMSE"]
                         
                         # Check if this hora matches the event_index
                         if hora == horas_possiveis[event_index]:
@@ -931,7 +1036,7 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
                                 else:
                                     text_y = 0.35  # Y position for the second station
 
-                                ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}", 
+                                ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}\nR^2: {r_squared}", 
                                         transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
                                         verticalalignment='top', horizontalalignment='right')
                             
@@ -1024,7 +1129,7 @@ plot_amplificacao_por_dataV3(nova_lista_dados_agrupados, anos, estacoes_estudada
 # %% plota detalhes estação, conjugada, data
 target_date = event_dates["Data"][51]
 # target_station = ['SMS', 'ASC', 'KDU']
-target_station = ['SMS']
+target_station = ['SJG']
 # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
 # campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
 # campos = ["H_nT"]  # Lista de campos a serem plotados
@@ -1032,6 +1137,6 @@ campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
 # plot_data_conjugadas(nova_lista_dados_agrupados, target_date, target_station,estacoes_conjugadas,campos)
 
-plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=1, campos=campos, ver_caracteristicas=True)
+plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
 #%%
 plt.close('all')
