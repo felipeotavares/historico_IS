@@ -398,8 +398,8 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                             # Verificando se a janela tem tamanho suficiente
                             if fim_janela - inicio_janela + 1 >= 20:
                                 #verbose
-                                # display(estacao)
-                                # display(data)
+                                display(estacao)
+                                display(data)
                                 # Extraindo a janela de dados
                                 dados_janela = dados_estacao.iloc[inicio_janela:fim_janela + 1]
                                 # Filtro passabaixa
@@ -412,7 +412,10 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 # Extraindo amplitude 
                                 # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela, 'dH_nT_movmean', 'H_nT_movmean')
                                 amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
+                                display(amp_ponto_esq)
+                                display(amp_ponto_dir)
 
+                                
                             # Adicionando os dados à lista de dados por data
                             dados_por_data.append({
                                 'Hora': hora,
@@ -463,6 +466,18 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
 def sigmoid(x, L, x0, k, b):
     return L / (1 + np.exp(-k * (x - x0))) + b
 
+# x_data = np.arange(50)
+# L= params[0]
+# x0= params[1]
+# k= params[2]
+# b= params[3]
+
+# A = L / (1 + np.exp(-k * (x_data - x0))) + b
+
+# B = np.exp(-k * (x_data - x0))
+
+
+
 def caract_ajuste(dados_janela, coluna):
     x_data = np.arange(len(dados_janela))
     y_data = dados_janela[coluna].values
@@ -485,24 +500,25 @@ def caract_ajuste(dados_janela, coluna):
     # Ajuste da curva sigmoide com tratamento de exceção
     try:
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', OptimizeWarning)
+            # warnings.simplefilter('ignore', OptimizeWarning)
             params, _ = curve_fit(sigmoid, x_data, y_data, p0, method='dogbox', maxfev=10000)
         L, x0, k, b = params
 
         # Curva ajustada
-        y_fit = sigmoid(np.arange(len(dados_janela)), L, x0, k, b)
+        y_fit = sigmoid(x_data, L, x0, k, b)
 
+        # display(y_fit)
         # Valores máximo e mínimo na curva ajustada
         max_idx = np.argmax(y_fit)
         min_idx = np.argmin(y_fit)
-
+        
         # Posições dos valores à esquerda e à direita
         posicao_esquerda = dados_janela.iloc[min_idx]['TIME']
         posicao_direita = dados_janela.iloc[max_idx]['TIME']
-
+        
         ponto_esquerda = [posicao_esquerda, y_fit[min_idx]]
         ponto_direita = [posicao_direita, y_fit[max_idx]]
-
+        
         # Cálculo do resíduo
         residual = np.sum((y_data - sigmoid(x_data, *params))**2)
 
@@ -513,8 +529,9 @@ def caract_ajuste(dados_janela, coluna):
 
         # Cálculo do RMSE
         rmse = np.sqrt(np.mean((y_data - y_fit)**2))
+        # display(r_squared)
 
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError):     
         return np.full(len(dados_janela), np.nan), np.nan, [np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
 
     return y_fit, L, ponto_esquerda, ponto_direita, residual, r_squared, rmse
@@ -865,6 +882,103 @@ def plot_amplificacao_por_data(lista_dados_agrupados, anos_selecionados, station
     
     # Exibe o gráfico
     plt.show()
+    
+def plot_data_conjugadasV2(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas=None, event_index=0, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    # Convert the target_date to a datetime object for comparison
+    target_date = pd.to_datetime(target_date)
+    
+    # Vector to store possible "Hora" values
+    horas_possiveis = []
+    
+    # Iterate through lista_dados_agrupados to find target_date and possible "Hora" values
+    for data_entry in lista_dados_agrupados:
+        data_date = pd.to_datetime(data_entry["Data"])
+        if data_date == target_date:
+            for station_data in data_entry["Estacoes"]:
+                hora = station_data["Hora"]
+                if hora not in horas_possiveis:
+                    horas_possiveis.append(hora)
+    
+    # Print possible "Hora" values found
+    print(f"Valores possíveis de 'Hora' para a data {target_date}: {horas_possiveis}")
+    
+    # Prepare subplots
+    num_plots = len(target_stations)
+    fig, axes = plt.subplots(num_plots, 1, figsize=(10, 6*num_plots))
+
+    if num_plots == 1:
+        axes = [axes]  # Ensure axes is a list even if there is only one plot
+
+    # Iterate through each target station
+    for i, target_station in enumerate(target_stations):
+        if estacoes_conjugadas is None or target_station not in estacoes_conjugadas:
+            station_pair = [target_station]
+        else:
+            station_pair = [target_station, estacoes_conjugadas[target_station]]
+        
+        # Check if the stations exist in the data
+        found_stations = []
+        for data_entry in lista_dados_agrupados:
+            data_date = pd.to_datetime(data_entry["Data"])
+            if data_date == target_date:
+                for station_data in data_entry["Estacoes"]:
+                    estacao = station_data["Estacao"]
+                    if estacao in station_pair:
+                        # Extract the DataFrame with the magnetic field data
+                        df = station_data["Dados_Janela"]
+                        
+                        # Additional station information
+                        hora = station_data["Hora"]
+                        amplitude = station_data["Amplitude"]
+                        latitude = station_data["Latitude"]
+                        longitude = station_data["Longitude"]
+                        ponto_amp_esq = station_data.get("Amplitude_ponto_esq", None)
+                        ponto_amp_dir = station_data.get("Amplitude_ponto_dir", None)
+                        r_squared = station_data["R_squared"]
+                        rmse = station_data["RMSE"]
+                        
+                        # Check if this hora matches the event_index
+                        if hora == horas_possiveis[event_index]:
+                            # Plot the data on the corresponding subplot
+                            ax = axes[i]
+                            for campo in campos:
+                                if campo in df.columns:
+                                    ax.plot(df["TIME"], df[campo], label=f"{campo} - {estacao}")
+                                    
+                            # Plot amplitude_x and amplitude_y as points if data is valid
+                            if ponto_amp_esq is not None and ponto_amp_dir is not None:
+                                ax.scatter(ponto_amp_esq[0], ponto_amp_esq[1], color='red')
+                                ax.scatter(ponto_amp_dir[0], ponto_amp_dir[1], color='blue')
+                                
+                            ax.set_xlabel("Time")
+                            ax.set_ylabel("Magnetic Field (nT)")
+                            ax.set_title(f"Magnetic Field Components on {target_date.strftime('%Y-%m-%d')} at {target_station}")
+                            ax.legend()
+                            ax.grid(True)
+                            
+                            # Display characteristics if ver_caracteristicas is True
+                            if ver_caracteristicas:
+                                # Fixed text position in the bottom right corner
+                                text_x = 0.95  # X position in axes coordinates
+                                text_y = 0.8 if estacao == target_station else 0.35  # Adjusted for multiple stations
+
+                                ax.text(text_x, text_y, f"Estacao: {estacao}\nHora: {hora}\nAmplitude: {amplitude}\nLatitude: {latitude}\nLongitude: {longitude}\nR^2: {r_squared}", 
+                                        transform=ax.transAxes, fontsize=10, bbox=dict(facecolor='white', alpha=0.5), 
+                                        verticalalignment='top', horizontalalignment='right')
+                            
+                            found_stations.append(estacao)
+        
+        # If not all stations were found
+        if not found_stations:
+            not_found_stations = set(station_pair) - set(found_stations)
+            not_found_stations_str = ", ".join(not_found_stations)
+            print(f"No data found for date {target_date.strftime('%Y-%m-%d')} and stations: {not_found_stations_str}.")
+    
+    plt.tight_layout()
+    plt.show()
         
 def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, estacoes_conjugadas, event_index=0, campos=["H_nT", "D_nT"], ver_caracteristicas=True):
     # Convert the target_date to a datetime object for comparison
@@ -997,17 +1111,19 @@ files_folder = diretorio_base = os.getcwd()
 
 folder_path = "sc_eventos"
 event_dates = get_events_dates(folder_path)
+display(event_dates)
 stations = 'SJG GUI KNY SMS ASC KDU'.split()
+
 estacoes_conjugadas = {
     'SMS': 'SJG',
     'ASC': 'GUI',
     'KDU': 'KNY'
 }
 
-download_files(files_folder, event_dates['Data'], stations)
+# download_files(files_folder, event_dates['Data'], stations)
 files_by_date = get_date_selection(os.path.join(files_folder, 'Dados'))
 
-janela = 30
+janela = 50
 lista_dados_agrupados = processa_dados_estacoes(files_by_date, event_dates, janela,estacoes_conjugadas)
 
 nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estacoes_conjugadas)
@@ -1023,12 +1139,15 @@ plot_amplificacao_por_data(nova_lista_dados_agrupados, anos, estacoes_estudadas,
 # %% plota detalhes estação, conjugada, data
 target_date = event_dates["Data"][51]
 # target_station = ['SMS', 'ASC', 'KDU']
-target_station = ['SMS']
+target_station = ['SJG']
 # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
 # campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
 # campos = ["H_nT"]  # Lista de campos a serem plotados
 campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
-plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
+# plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
+
+plot_data_conjugadasV2(nova_lista_dados_agrupados, '2023-09-12', target_station, event_index=0, campos=campos, ver_caracteristicas=True)
+
 #%%
 # plt.close('all')
