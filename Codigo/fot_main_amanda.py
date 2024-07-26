@@ -315,40 +315,84 @@ def get_events_dates(folder):
     
     return lista_datas
 
-def get_date_selection(diretorio_base):
-    dados_por_data = {}
-    
-    for nome_pasta in os.listdir(diretorio_base):
-        caminho_pasta = os.path.join(diretorio_base, nome_pasta)
+def get_date_selection(diretorio_base, event_dates):
+    dados_por_data = []
+
+    # Iterar sobre as datas e horas fornecidas
+    for _, row in event_dates.iterrows():
+        data = pd.to_datetime(row['Data'])
+        hora_decimal = row['Hora']
+        
+        # Converter a hora decimal para horas e minutos
+        horas = int(hora_decimal)
+        minutos = int((hora_decimal - horas) * 60)
+        
+        # Criar um timedelta com horas e minutos
+        delta_tempo = pd.to_timedelta(f'{horas}h {minutos}m')
+        
+        # Criar um timestamp com data e hora
+        data_hora = data + delta_tempo
+        
+        caminho_pasta = os.path.join(diretorio_base, data.strftime('%Y%m%d'))
         
         if os.path.isdir(caminho_pasta):
-            data = pd.to_datetime(nome_pasta, format='%Y%m%d')
-            dados_estacoes = []
-            
             for nome_arquivo in os.listdir(caminho_pasta):
                 caminho_arquivo = os.path.join(caminho_pasta, nome_arquivo)
                 
                 if os.path.isfile(caminho_arquivo) and not caminho_arquivo.endswith('.ini'):
                     df, estacao = process_data(caminho_arquivo)
                     city, lat, lon = stations_info[estacao]['city'], round(stations_info[estacao]['lat'], 1), round(stations_info[estacao]['lon'], 1)
-                    dados_estacoes.append({
+                    dados_por_data.append({
+                        'DataHora': data_hora,
+                        'Hora': hora_decimal,
                         'Estacao': estacao,
                         'Dados': df,
                         'Cidade': city,
-                        'Latitude':lat,
-                        "Longitude": lon
+                        'Latitude': lat,
+                        'Longitude': lon
                     })
-            
-            dados_por_data[data] = pd.DataFrame(dados_estacoes)
     
-    dados_globais = [{'Data': data, 'Dados_por_Estacao': df_estacoes} for data, df_estacoes in dados_por_data.items()]
-    df_final = pd.DataFrame(dados_globais)
-    return df_final
+    return dados_por_data
 # %% level 1 process
+def recorte_evento(dados_por_data, tamanho_janela):
+    eventos_sc = []
+
+    for item in dados_por_data:
+        df_dados = item['Dados']
+        hora_decimal = item['Hora']
+        
+        # Converter hora_decimal para horas e minutos
+        horas = int(hora_decimal)
+        minutos = int((hora_decimal - horas) * 60)
+        
+        # Criar um timedelta com horas e minutos
+        delta_tempo = pd.to_timedelta(f'{horas}h {minutos}m')
+        
+        # Calcular o tempo central (data_hora)
+        data_hora_central = item['DataHora']
+        
+        # Calcular o intervalo de tempo
+        janela_inicio = data_hora_central - pd.to_timedelta(tamanho_janela / 2, unit='s')
+        janela_fim = data_hora_central + pd.to_timedelta(tamanho_janela / 2, unit='s')
+        
+        # Filtrar o DataFrame 'Dados' para manter apenas os dados dentro do intervalo
+        df_recortado = df_dados[(df_dados['TIME'] >= janela_inicio) & (df_dados['TIME'] <= janela_fim)]
+        
+        # Adicionar o DataFrame recortado ao resultado
+        eventos_sc.append({
+            'DataHora': item['DataHora'],
+            'Hora': item['Hora'],
+            'Estacao': item['Estacao'],
+            'Dados': df_recortado,
+            'Cidade': item['Cidade'],
+            'Latitude': item['Latitude'],
+            'Longitude': item['Longitude']
+        })
+    
+    return eventos_sc
+
 def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas):
     """
-    Processa janelas de dados para todas as estações disponíveis nas datas e horas especificadas e calcula a diferença entre valores a 10 posições à direita e à esquerda do centro.
-
     Parâmetros:
     df_global (DataFrame): DataFrame contendo os dados agrupados.
     datas_horas (DataFrame): DataFrame contendo as datas e horas no formato 'AAAA-MM-DD' e horas no formato float.
@@ -1123,6 +1167,8 @@ estacoes_conjugadas = {
 # download_files(files_folder, event_dates['Data'], stations)
 files_by_date = get_date_selection(os.path.join(files_folder, 'Dados'))
 
+A = files_by_date['Dados_por_Estacao']
+
 janela = 50
 lista_dados_agrupados = processa_dados_estacoes(files_by_date, event_dates, janela,estacoes_conjugadas)
 
@@ -1151,3 +1197,19 @@ plot_data_conjugadasV2(nova_lista_dados_agrupados, '2023-09-12', target_station,
 
 #%%
 # plt.close('all')
+
+# %% testes
+
+#%% teste execução
+event_dates['Data'] = pd.to_datetime(event_dates['Data'])
+
+
+dados_por_data = get_date_selectionv2(os.path.join(files_folder, 'Dados'),event_dates)
+
+# Define o tamanho da janela em segundos (exemplo: 3600 segundos = 1 hora)
+tamanho_janela = 3600
+
+# Chame a função para recortar os dados
+eventos_sc = recorte_evento(dados_por_data, tamanho_janela)
+
+lista_dados_agrupadosv2 = processa_dados_estacoesv2(files_by_date, event_dates, janela,estacoes_conjugadas)
