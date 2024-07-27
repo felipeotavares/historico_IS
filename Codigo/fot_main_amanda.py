@@ -22,6 +22,9 @@ from scipy.optimize import curve_fit
 from scipy.optimize import OptimizeWarning
 import warnings
 from matplotlib.dates import DateFormatter, DayLocator
+import matplotlib.dates as mdates
+import seaborn as sns
+from datetime import timedelta
 
 # %% infos
 stations_info = {
@@ -302,6 +305,7 @@ def get_events_dates(folder):
         file_path = os.path.join(folder, file_name)
         if os.path.isfile(file_path):
             # Ler os eventos do arquivo e converter a coluna TIME para decimal
+            print(file_path)
             hora_especifica = read_data_eventos(file_path)
             
             hora_especifica['TIME'] = hora_especifica['TIME'].apply(time_to_decimal_24)
@@ -354,26 +358,129 @@ def get_date_selection(diretorio_base, event_dates):
     
     return dados_por_data
 # %% level 1 process
+def calcular_tempo_local(eventos_sc):
+    df = pd.DataFrame(eventos_sc)
+    
+    # Verifique se o DataFrame contém as colunas necessárias
+    if 'Longitude' not in df.columns or 'DataHora' not in df.columns:
+        print("O DataFrame não contém as colunas necessárias: 'Longitude' e 'DataHora'.")
+        return
+
+    # Converta 'DataHora' para datetime, se ainda não estiver
+    df['DataHora'] = pd.to_datetime(df['DataHora'])
+
+    # Calcular o fuso horário local a partir da longitude
+    df['FusoHorario'] = df['Longitude'] / 15
+
+    # Calcular o Tempo Local adicionando o fuso horário ao Tempo Universal (UTC)
+    df['TempoLocal'] = df.apply(lambda row: row['DataHora'] + timedelta(hours=row['FusoHorario']), axis=1)
+
+    # Retornar o DataFrame com o Tempo Local calculado
+    eventos_sc_local = df.to_dict(orient='records')
+    
+    return eventos_sc_local
+
+def amplificacao_estacoes(eventos_sc, estacoes_conjugadas):
+
+    #opção para calcular amplificação para cada estação conjugada
+    # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
+
+    eventos_com_amplificacao = []
+    
+    # Crie um dicionário para armazenar amplitudes por DataHora e Estação
+    amplitudes_por_datahora = {}
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        amplitude = evento['Amplitude']
+        
+        if datahora not in amplitudes_por_datahora:
+            amplitudes_por_datahora[datahora] = {}
+        
+        amplitudes_por_datahora[datahora][estacao] = amplitude
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        
+        amplificacao = None
+        
+        if datahora in amplitudes_por_datahora:
+            # estacao_conjugada_nome = estacoes_conjugadas.get(estacao, estacoes_conjugadas_reverso.get(estacao))
+            estacao_conjugada_nome = estacoes_conjugadas.get(estacao, None)
+
+            if estacao_conjugada_nome:
+                conjugada_amplitude = amplitudes_por_datahora[datahora].get(estacao_conjugada_nome, None)
+                
+                if conjugada_amplitude is not None and conjugada_amplitude != 0:
+                    estacao_amplitude = amplitudes_por_datahora[datahora].get(estacao, None)
+                    if estacao_amplitude is not None:
+                        amplificacao = estacao_amplitude / conjugada_amplitude
+                else:
+                    amplificacao = None
+            else:
+                amplificacao = None
+        
+        evento_com_amplificacao = evento.copy()
+        evento_com_amplificacao['Amplificacao'] = amplificacao
+        eventos_com_amplificacao.append(evento_com_amplificacao)
+    
+    return eventos_com_amplificacao
+
+
+def derivativas(dados_por_data):
+    eventos_sc = []
+
+    for item in dados_por_data:
+        df_dados = item['Dados']
+        hora_central = item['Hora']
+    
+        # Filtro passabaixa
+        # dados_janela['H_nT_filtered'] = filtro_passa_baixa(dados_janela['dH_nT'],0.001,1,1)
+        df_dados['H_nT_movmean'] = df_dados['H_nT'].rolling(window=5, center=True).mean()
+        # Calculando derivada de H filtrado
+        df_dados['dH_nT_movmean'] = df_dados['H_nT_movmean'].diff()
+        # Calculo função sigmoid
+        df_dados['H_nT_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_ajuste(df_dados, 'H_nT_movmean')
+        # Extraindo amplitude 
+        # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela, 'dH_nT_movmean', 'H_nT_movmean')
+        # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(df_dados, 'H_nT_movmean', 'H_nT_movmean')
+        # display(amp_ponto_esq)
+        # display(amp_ponto_dir)
+        # dst = fget_dst(df_dados['DataHora'])
+        
+        # Adicionar o DataFrame recortado ao resultado
+        eventos_sc.append({
+            'DataHora': item['DataHora'],
+            'Hora': item['Hora'],
+            'Estacao': item['Estacao'],
+            'Dados': df_dados,
+            'Cidade': item['Cidade'],
+            'Latitude': item['Latitude'],
+            'Longitude': item['Longitude'],
+            'Amplitude': amplitude,
+            # 'Amplitude_ponto_esq': amp_ponto_esq,
+            # 'Amplitude_ponto_dir': amp_ponto_dir,
+            'Ponto_Esquerda': ponto_esquerda,
+            'Ponto_Direita': ponto_direita,
+            'Residual': residual,
+            'R_squared': r_squared,
+            'RMSE': rmse
+        })
+    
+    return eventos_sc
+
 def recorte_evento(dados_por_data, tamanho_janela):
     eventos_sc = []
 
     for item in dados_por_data:
         df_dados = item['Dados']
-        hora_decimal = item['Hora']
-        
-        # Converter hora_decimal para horas e minutos
-        horas = int(hora_decimal)
-        minutos = int((hora_decimal - horas) * 60)
-        
-        # Criar um timedelta com horas e minutos
-        delta_tempo = pd.to_timedelta(f'{horas}h {minutos}m')
-        
-        # Calcular o tempo central (data_hora)
-        data_hora_central = item['DataHora']
+        hora_central = item['Hora']
         
         # Calcular o intervalo de tempo
-        janela_inicio = data_hora_central - pd.to_timedelta(tamanho_janela / 2, unit='s')
-        janela_fim = data_hora_central + pd.to_timedelta(tamanho_janela / 2, unit='s')
+        janela_inicio = hora_central - tamanho_janela / 2
+        janela_fim = hora_central + tamanho_janela / 2
         
         # Filtrar o DataFrame 'Dados' para manter apenas os dados dentro do intervalo
         df_recortado = df_dados[(df_dados['TIME'] >= janela_inicio) & (df_dados['TIME'] <= janela_fim)]
@@ -455,7 +562,7 @@ def processa_dados_estacoes(df_global, datas_horas, janela, estacoes_conjugadas)
                                 dados_janela['H_nT_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_ajuste(dados_janela, 'H_nT_movmean')
                                 # Extraindo amplitude 
                                 # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV2(dados_janela, 'dH_nT_movmean', 'H_nT_movmean')
-                                amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
+                                # amplitude, amp_ponto_esq, amp_ponto_dir = caract_amplitudeV4(dados_janela, 'H_nT_movmean', 'H_nT_movmean')
                                 display(amp_ponto_esq)
                                 display(amp_ponto_dir)
 
@@ -829,6 +936,102 @@ def calcular_amplificacao(lista_dados_agrupados, estacoes_conjugadas):
     
     return nova_lista_dados_agrupados
 # %% Plot data
+def plotar_media_amplificacao_por_hora(eventos_sc, estacao_filtrar):
+    # Crie um DataFrame a partir dos eventos com amplificação
+    df = pd.DataFrame(eventos_sc)
+    
+    # Verifique se o DataFrame contém as colunas necessárias
+    if 'Amplificacao' not in df.columns or 'TempoLocal' not in df.columns:
+        print("A lista de eventos não contém dados de amplificação ou TempoLocal.")
+        return
+    
+    # Filtrar amplificações dentro do intervalo [-10, 10]
+    df = df[(df['Amplificacao'] >= -10) & (df['Amplificacao'] <= 10)]
+    
+    # Filtrar por estação específica
+    df = df[df['Estacao'] == estacao_filtrar]
+
+    # Verificar se há dados após o filtro
+    if df.empty:
+        print(f"Nenhum dado encontrado para a estação '{estacao_filtrar}'.")
+        return
+
+    # Converta 'TempoLocal' para datetime
+    df['TempoLocal'] = pd.to_datetime(df['TempoLocal'])
+
+    # Certificar que 'Amplificacao' é numérica
+    df['Amplificacao'] = pd.to_numeric(df['Amplificacao'], errors='coerce')
+
+    # Filtrar dados para garantir que não existam valores NaN na amplificação
+    df = df.dropna(subset=['Amplificacao'])
+
+    # Definir o intervalo de 1 hora
+    df.set_index('TempoLocal', inplace=True)
+    df_resampled = df.resample('H').mean()  # Resample para 1 hora e calcula a média
+    
+    # Crie o gráfico
+    plt.figure(figsize=(12, 6))
+    plt.plot(df_resampled.index, df_resampled['Amplificacao'], marker='o', linestyle='-', color='b')
+
+    # Configurar formato do eixo x
+    plt.xlabel('Tempo')
+    plt.ylabel('Média da Amplificação')
+    plt.title(f'Média da Amplificação por Intervalos de 1 Hora - Estação: {estacao_filtrar}')
+    plt.grid(True, linestyle='--', alpha=0.7)
+
+    # Ajustar a formatação do eixo x
+    # plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y-%m-%d %H:%M'))
+    # plt.gca().xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=1))
+    # plt.gcf().autofmt_xdate()  # Rotaciona os rótulos do eixo x para melhor visualização
+
+    # Exiba o gráfico
+    plt.tight_layout()
+    plt.show()
+
+
+def plotar_amplificacao_por_tempo_local(eventos_sc, estacao_filtrar):
+    # Crie um DataFrame a partir dos eventos com amplificação
+    df = pd.DataFrame(eventos_sc)
+    
+    # Verifique se o DataFrame contém as colunas necessárias
+    if 'Amplificacao' not in df.columns or 'TempoLocal' not in df.columns:
+        print("A lista de eventos não contém dados de amplificação ou TempoLocal.")
+        return
+    
+    # Filtrar amplificações dentro do intervalo [-10, 10]
+    df = df[(df['Amplificacao'] >= -10) & (df['Amplificacao'] <= 10)]
+    
+    # Filtrar por estação específica
+    df = df[df['Estacao'] == estacao_filtrar]
+
+    # Verificar se há dados após o filtro
+    if df.empty:
+        print(f"Nenhum dado encontrado para a estação '{estacao_filtrar}'.")
+        return
+
+    # Converta 'TempoLocal' para datetime, se ainda não estiver
+    df['TempoLocal'] = pd.to_datetime(df['TempoLocal'])
+    
+    # Extrair a hora e minuto como decimal
+    df['HoraDecimal'] = df['TempoLocal'].dt.hour + df['TempoLocal'].dt.minute / 60
+
+    # Crie o gráfico
+    plt.figure(figsize=(12, 6))
+    sns.scatterplot(data=df, x='HoraDecimal', y='Amplificacao', marker='o', color='b')
+
+    # Configurar formato do eixo x
+    plt.xlabel('Hora (decimal)')
+    plt.ylabel('Amplificação')
+    plt.title(f'Amplificação por Hora e Minuto - Estação: {estacao_filtrar}')
+    plt.grid(True, linestyle='--', alpha=0.7)
+
+    # Ajustar a formatação do eixo x
+    plt.xticks(rotation=45)  # Rotaciona os rótulos do eixo x para melhor leitura
+
+    # Exiba o gráfico
+    plt.tight_layout()
+    plt.show()
+
 def plot_amplificacao_por_data(lista_dados_agrupados, anos_selecionados, stations, amplificacao_min=None, amplificacao_max=None):
     # Define a paleta de cores para as estações
     cores = ['b', 'g', 'r', 'c', 'm', 'y']
@@ -1125,36 +1328,13 @@ def plot_data_conjugadas(lista_dados_agrupados, target_date, target_stations, es
     plt.tight_layout()
     plt.show()
 
-# %% lista dados agrupados teste
-lista_dados_agrupados_teste = [
-    {
-        "Data": "2024-06-01",
-        "Estacoes": [
-            {"Hora": "00:00", "Estacao": "BOA", "Dados_Janela": [], "Amplitude": 0.1, "Amplificacao": 10, "Latitude": 2.800556, "Longitude": -60.675833},
-            {"Hora": "00:00", "Estacao": "MAN", "Dados_Janela": [], "Amplitude": 0.2, "Amplificacao": 15, "Latitude": -2.888333, "Longitude": -59.969722},
-            {"Hora": "00:00", "Estacao": "PVE", "Dados_Janela": [], "Amplitude": 0.3, "Amplificacao": 20, "Latitude": -8.763611, "Longitude": -63.906389},
-            {"Hora": "00:00", "Estacao": "BLM", "Dados_Janela": [], "Amplitude": 0.4, "Amplificacao": 25, "Latitude": -1.441111, "Longitude": -48.444444},
-            {"Hora": "00:00", "Estacao": "SLZ", "Dados_Janela": [], "Amplitude": 0.5, "Amplificacao": 30, "Latitude": -2.594167, "Longitude": -44.209722},
-            {"Hora": "00:00", "Estacao": "ALF", "Dados_Janela": [], "Amplitude": 0.6, "Amplificacao": 35, "Latitude": -9.870278, "Longitude": -56.104167}
-        ]
-    },
-    {
-        "Data": "2024-06-02",
-        "Estacoes": [
-            {"Hora": "00:00", "Estacao": "BOA", "Dados_Janela": [], "Amplitude": 0.2, "Amplificacao": 12, "Latitude": 2.800556, "Longitude": -60.675833},
-            {"Hora": "00:00", "Estacao": "MAN", "Dados_Janela": [], "Amplitude": 0.3, "Amplificacao": 18, "Latitude": -2.888333, "Longitude": -59.969722},
-            {"Hora": "00:00", "Estacao": "PVE", "Dados_Janela": [], "Amplitude": 0.4, "Amplificacao": 22, "Latitude": -8.763611, "Longitude": -63.906389},
-            {"Hora": "00:00", "Estacao": "BLM", "Dados_Janela": [], "Amplitude": 0.5, "Amplificacao": 28, "Latitude": -1.441111, "Longitude": -48.444444},
-            {"Hora": "00:00", "Estacao": "SLZ", "Dados_Janela": [], "Amplitude": 0.6, "Amplificacao": 32, "Latitude": -2.594167, "Longitude": -44.209722},
-            {"Hora": "00:00", "Estacao": "ALF", "Dados_Janela": [], "Amplitude": 0.7, "Amplificacao": 38, "Latitude": -9.870278, "Longitude": -56.104167}
-        ]
-    }
-]
+
 # %% Gera lista de dados agrupados
 files_folder = diretorio_base = os.getcwd()
 
 folder_path = "sc_eventos"
 event_dates = get_events_dates(folder_path)
+download_files(files_folder, event_dates['Data'], stations)
 display(event_dates)
 stations = 'SJG GUI KNY SMS ASC KDU'.split()
 
@@ -1164,52 +1344,73 @@ estacoes_conjugadas = {
     'KDU': 'KNY'
 }
 
-# download_files(files_folder, event_dates['Data'], stations)
-files_by_date = get_date_selection(os.path.join(files_folder, 'Dados'))
-
-A = files_by_date['Dados_por_Estacao']
-
-janela = 50
-lista_dados_agrupados = processa_dados_estacoes(files_by_date, event_dates, janela,estacoes_conjugadas)
-
-nova_lista_dados_agrupados = calcular_amplificacao(lista_dados_agrupados, estacoes_conjugadas)
 
 
-#%% Plota por ano
-# Anos a serem plotados
-anos = [2019, 2020, 2021, 2022, 2023,2024]
-estacoes_estudadas = 'SMS ASC KDU'
+# #%% Plota por ano
+# # Anos a serem plotados
+# anos = [2019, 2020, 2021, 2022, 2023,2024]
+# estacoes_estudadas = 'SMS ASC KDU'
 
-plot_amplificacao_por_data(nova_lista_dados_agrupados, anos, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
+# plot_amplificacao_por_data(nova_lista_dados_agrupados, anos, estacoes_estudadas,amplificacao_min=-10, amplificacao_max=10)
 
-# %% plota detalhes estação, conjugada, data
-target_date = event_dates["Data"][51]
-# target_station = ['SMS', 'ASC', 'KDU']
-target_station = ['SJG']
-# campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
-# campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
-# campos = ["H_nT"]  # Lista de campos a serem plotados
-campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
+# # %% plota detalhes estação, conjugada, data
+# target_date = event_dates["Data"][51]
+# # target_station = ['SMS', 'ASC', 'KDU']
+# target_station = ['SJG']
+# # campos = ["H_nT", "H_nT_filtered"]  # Lista de campos a serem plotados
+# # campos = ["dH_nT_movmean","H_nT_movmean"]  # Lista de campos a serem plotados
+# # campos = ["H_nT"]  # Lista de campos a serem plotados
+# campos = ["H_nT","H_nT_ajuste"]  # Lista de campos a serem plotados
 
-# plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
+# # plot_data_conjugadas(nova_lista_dados_agrupados, '2023-09-12', target_station, estacoes_conjugadas, event_index=0, campos=campos, ver_caracteristicas=True)
 
-plot_data_conjugadasV2(nova_lista_dados_agrupados, '2023-09-12', target_station, event_index=0, campos=campos, ver_caracteristicas=True)
+# plot_data_conjugadasV2(nova_lista_dados_agrupados, '2023-09-12', target_station, event_index=0, campos=campos, ver_caracteristicas=True)
 
 #%%
 # plt.close('all')
 
 # %% testes
 
-#%% teste execução
+# #%% teste execução
 event_dates['Data'] = pd.to_datetime(event_dates['Data'])
 
 
-dados_por_data = get_date_selectionv2(os.path.join(files_folder, 'Dados'),event_dates)
+dados_por_data = get_date_selection(os.path.join(files_folder, 'Dados'),event_dates)
 
-# Define o tamanho da janela em segundos (exemplo: 3600 segundos = 1 hora)
-tamanho_janela = 3600
+# Define o tamanho da janela em horas decimais (exemplo: 15.5 é as 15h e 30 min)
+tamanho_janela =1
 
 # Chame a função para recortar os dados
 eventos_sc = recorte_evento(dados_por_data, tamanho_janela)
 
-lista_dados_agrupadosv2 = processa_dados_estacoesv2(files_by_date, event_dates, janela,estacoes_conjugadas)
+
+eventos_sc_est = derivativas(eventos_sc)
+
+estacoes_conjugadas = {
+    'SMS': 'SJG',
+    'ASC': 'GUI',
+    'KDU': 'KNY'
+}
+amp_sc = amplificacao_estacoes(eventos_sc_est, estacoes_conjugadas)
+
+amp_sc_local = calcular_tempo_local(amp_sc)
+
+    
+# plotar_amplificacao_por_datav2(amp_sc)
+    
+# plotar_amplificacao_por_hora(amp_sc)
+
+plotar_amplificacao_por_tempo_local(amp_sc_local,'SMS')
+plotar_media_amplificacao_por_hora(amp_sc_local,'SMS')
+
+# # Definindo os anos a serem plotados
+# anos = [2019, 2020, 2021, 2022, 2023, 2024]
+
+# # Estações estudadas
+# estacoes_estudadas = 'SMS ASC KDU'
+
+
+# plot_amplificacao_por_datav2(amplificacao_sc, anos, estacoes_estudadas, amplificacao_min=-10, amplificacao_max=10)
+
+
+# lista_dados_agrupadosv2 = processa_dados_estacoesv2(files_by_date, event_dates, janela,estacoes_conjugadas)
