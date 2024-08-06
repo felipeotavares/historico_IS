@@ -28,6 +28,7 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter, DayLocator
 import pandas as pd
+import io
 
 # %% infos
 stations_info = {
@@ -89,7 +90,7 @@ def find_header(file_path):
 
 def process_data(file_path):
     station_name, header_lines, kind = find_header(file_path)
-    df = pd.read_csv(file_path, skiprows=header_lines, delim_whitespace=True)
+    df = pd.read_csv(file_path, skiprows=header_lines, sep='\s+')
 
     if kind == "HDZF" or kind == "XYZF":
         df['TIME'] = pd.to_datetime(df['DATE'] + ' ' + df['TIME'])
@@ -114,6 +115,49 @@ def process_data(file_path):
     return df[['TIME', 'H_nT', 'dH_nT']], station_name
 
 # %% Data download -não esta retornando os arquivos corretos, url pode estar errada
+def get_filtered_solar_flux_data():
+    """
+    Faz o download dos dados diários do fluxo solar F10.7, filtra para o período de 2019 a 2024,
+    remove linhas com datas inválidas e valores acima de 300 sfu, e aplica suavização com média móvel.
+    
+    Returns:
+        filtered_data (DataFrame): Dados filtrados e suavizados do fluxo solar F10.7.
+    """
+    # URL dos dados diários do fluxo solar F10.7
+    url = 'https://spaceweather.gc.ca/solar_flux_data/daily_flux_values/fluxtable.txt'
+
+    try:
+        # Fazer o download dos dados
+        response = requests.get(url)
+        response.raise_for_status()  # Verifica se houve algum erro na requisição
+
+        # Ler o conteúdo como texto e carregar em um DataFrame
+        data = response.text
+
+        # Processar o conteúdo para criar um DataFrame
+        df = pd.read_csv(io.StringIO(data), delim_whitespace=True, skiprows=1)
+
+        # Ajustar os nomes das colunas conforme necessário
+        df.columns = ['FluxDate', 'FluxTime', 'FluxJulian', 'CarringtonRot', 'ObsFlux', 'AdjFlux', 'Urs']
+
+        # Criar uma coluna de data usando o FluxDate
+        df['Date'] = pd.to_datetime(df['FluxDate'], format='%Y%m%d', errors='coerce')
+
+        # Filtrar os dados para o período de 2019 a 2024, remover linhas com datas inválidas e valores acima de 300 sfu
+        filtered_data = df[(df['Date'] >= '2019-01-01') & (df['Date'] <= '2024-12-31') & (df['ObsFlux'] <= 300)].dropna(subset=['Date'])
+
+        # Suavização dos dados usando média móvel (window=30 dias)
+        filtered_data['SmoothedObsFlux'] = filtered_data['ObsFlux'].rolling(window=30).mean()
+
+        return filtered_data
+
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na requisição HTTP: {e}")
+        return None
+    except Exception as e:
+        print(f"Erro ao processar os dados: {e}")
+        return None
+
 def download_sc_dates(years, save_folder):
     """
     Faz o download de arquivos SSC para uma lista de anos e salva na pasta especificada.
@@ -306,7 +350,7 @@ def get_events_dates(folder):
     # Itera sobre todos os arquivos na pasta
     for file_name in os.listdir(folder):
         file_path = os.path.join(folder, file_name)
-        if os.path.isfile(file_path):
+        if os.path.isfile(file_path) and not file_path.endswith('.ini'):
             # Ler os eventos do arquivo e converter a coluna TIME para decimal
             print(file_path)
             hora_especifica = read_data_eventos(file_path)
@@ -692,6 +736,151 @@ def caract_latitude(station_name, stations_info):
 
 
 # %% Plot data
+def plot_amplificacao_and_solar_flux(eventos_sc_local, filtered_data, anos, estacoes):
+    """
+    Plota a amplificação por data para as estações especificadas e os anos fornecidos, junto com os dados do fluxo solar F10.7.
+
+    Args:
+        eventos_sc_local (list): Lista de eventos com amplificação e tempo local calculado.
+        filtered_data (DataFrame): Dados filtrados e suavizados do fluxo solar F10.7.
+        anos (list): Lista de anos para filtrar os dados.
+        estacoes (str): String com os códigos das estações separadas por espaço.
+    """
+    # Crie um DataFrame a partir dos eventos
+    df_amplificacao = pd.DataFrame(eventos_sc_local)
+
+    
+    # Verifique se o DataFrame contém as colunas necessárias
+    if 'Amplificacao' not in df_amplificacao.columns or 'DataHora' not in df_amplificacao.columns or 'RMSE' not in df_amplificacao.columns:
+        print("A lista de eventos não contém dados de amplificação, DataHora ou RMSE.")
+        return
+    
+    # Converter a coluna 'DataHora' para datetime, se ainda não estiver
+    df_amplificacao['DataHora'] = pd.to_datetime(df_amplificacao['DataHora'])
+    
+    # Filtrar os dados pelos anos especificados
+    df_amplificacao = df_amplificacao[df_amplificacao['DataHora'].dt.year.isin(anos)]
+       
+    # Filtrar pelas estações especificadas
+    estacoes_lista = estacoes.split()
+    df_amplificacao = df_amplificacao[df_amplificacao['Estacao'].isin(estacoes_lista)]
+    
+    # Verificar se há dados após o filtro
+    if df_amplificacao.empty:
+        print("Nenhum dado encontrado para os anos e estações especificados.")
+        return
+    
+    # Calcular a porcentagem de pontos com RMSE > 0.8
+    total_pontos = len(df_amplificacao)
+    pontos_rmse_alto = len(df_amplificacao[df_amplificacao['RMSE'] > 0.8])
+    porcentagem_rmse_alto = (pontos_rmse_alto / total_pontos) * 100 if total_pontos > 0 else 0
+    
+    # Definir cores específicas para cada estação
+    cmap = plt.get_cmap('tab10')
+    cores = cmap(np.linspace(0, 1, len(estacoes_lista)))
+    cor_estacao = {estacao: cores[i] for i, estacao in enumerate(estacoes_lista)}
+
+    # Criar o gráfico
+    fig, ax1 = plt.subplots(figsize=(14, 8))
+
+    for estacao in estacoes_lista:
+        df_estacao = df_amplificacao[df_amplificacao['Estacao'] == estacao]
+        if not df_estacao.empty:
+            ax1.scatter(df_estacao['DataHora'], df_estacao['Amplificacao'], label=estacao, color=cor_estacao[estacao], s=50)
+            
+            # Destacar pontos com RMSE maior que 0.8
+            df_high_rmse = df_estacao[df_estacao['RMSE'] > 0.8]
+            if not df_high_rmse.empty:
+                ax1.scatter(df_high_rmse['DataHora'], df_high_rmse['Amplificacao'], edgecolor='red', facecolor='none', s=100, linewidth=1.5)
+
+    ax1.set_xlabel('Data')
+    ax1.set_ylabel('Amplificação')
+    ax1.set_title(f'Amplificação por Data para as Estações: {estacoes}\n{porcentagem_rmse_alto:.2f}% de pontos com RMSE > 0.8')
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    ax1.legend(title='Estação')
+
+    # Adicionar os dados do fluxo solar F10.7
+    ax2 = ax1.twinx()
+    ax2.plot(filtered_data['Date'], filtered_data['SmoothedObsFlux'], label='Fluxo Solar F10.7 (Suavizado)', linewidth=2, color='orange')
+    ax2.set_ylabel('F10.7 (sfu)')
+    ax2.legend(loc='upper left')
+
+    # Ajustar a formatação do eixo x
+    plt.xticks(rotation=45)  # Rotaciona os rótulos do eixo x para melhor leitura
+    
+    # Exibir o gráfico
+    plt.tight_layout()
+    plt.show()
+    
+def plot_amplificacao_por_data(eventos_sc_local, anos, estacoes):
+    """
+    Plota a amplificação por data para as estações especificadas e os anos fornecidos.
+
+    Args:
+        eventos_sc_local (aist): Lista de eventos com amplificação e tempo local calculado.
+        anos (list): Lista de anos para filtrar os dados.
+        estacoes (str): String com os códigos das estações separadas por espaço.
+    """
+    # Crie um DataFrame a partir dos eventos
+    df = pd.DataFrame(eventos_sc_local)
+    
+    # Verifique se o DataFrame contém as colunas necessárias
+    if 'Amplificacao' not in df.columns or 'DataHora' not in df.columns or 'RMSE' not in df.columns:
+        print("A lista de eventos não contém dados de amplificação, DataHora ou RMSE.")
+        return
+    
+    # Converter a coluna 'DataHora' para datetime, se ainda não estiver
+    df['DataHora'] = pd.to_datetime(df['DataHora'])
+    
+    # Filtrar os dados pelos anos especificados
+    df = df[df['DataHora'].dt.year.isin(anos)]
+    
+    # Filtrar pelas estações especificadas
+    estacoes_lista = estacoes.split()
+    df = df[df['Estacao'].isin(estacoes_lista)]
+    
+    # Verificar se há dados após o filtro
+    if df.empty:
+        print("Nenhum dado encontrado para os anos e estações especificados.")
+        return
+    
+    # Calcular a porcentagem de pontos com RMSE > 0.8
+    total_pontos = len(df)
+    pontos_rmse_alto = len(df[df['RMSE'] > 0.8])
+    porcentagem_rmse_alto = (pontos_rmse_alto / total_pontos) * 100 if total_pontos > 0 else 0
+    
+    # Definir cores específicas para cada estação
+    cmap = plt.get_cmap('tab10')
+    cores = cmap(np.linspace(0, 1, len(estacoes_lista)))
+    cor_estacao = {estacao: cores[i] for i, estacao in enumerate(estacoes_lista)}
+
+    # Criar o gráfico
+    plt.figure(figsize=(14, 8))
+    for estacao in estacoes_lista:
+        df_estacao = df[df['Estacao'] == estacao]
+        print(estacao)
+        if not df_estacao.empty:
+            plt.scatter(df_estacao['DataHora'], df_estacao['Amplificacao'], label=estacao, color=cor_estacao[estacao])
+
+            # # Destacar pontos com RMSE maior que 0.8
+            # df_high_rmse = df_estacao[df_estacao['RMSE'] > 0.8]
+            # if not df_high_rmse.empty:
+            #     plt.scatter(df_high_rmse['DataHora'], df_high_rmse['Amplificacao'], edgecolor='red', facecolor='none', s=100, linewidth=1.5)
+
+    # Configurar formato do eixo x
+    plt.xlabel('Data')
+    plt.ylabel('Amplificação')
+    plt.title(f'Amplificação por Data para as Estações: {estacoes}\n{porcentagem_rmse_alto:.2f}% de pontos com RMSE > 0.8')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Ajustar a formatação do eixo x
+    plt.xticks(rotation=45)  # Rotaciona os rótulos do eixo x para melhor leitura
+    plt.legend(title='Estação')
+    
+    # Exibir o gráfico
+    plt.tight_layout()
+    plt.show()
+
 def plotar_amplificacao_por_tempo_local(eventos_sc, estacao_filtrar):
     # Crie um DataFrame a partir dos eventos com amplificação
     df = pd.DataFrame(eventos_sc)
@@ -736,6 +925,7 @@ def plotar_amplificacao_por_tempo_local(eventos_sc, estacao_filtrar):
     plt.show()
 
 
+    
 # %% Gera lista de todos dados agrupados por estação
 files_folder = diretorio_base = os.getcwd()
 stations = 'SJG GUI KNY SMS ASC KDU'.split()
@@ -774,6 +964,14 @@ plotar_amplificacao_por_tempo_local(amp_sc_local,'SMS')
 # # Definindo os anos a serem plotados
 anos = [2019, 2020, 2021, 2022, 2023, 2024]
 
-# plot_amplificacao_por_data(amp_sc_local, [2014,2015,2016], 'SJG GUI KNY SMS ASC KDU')
+plot_amplificacao_por_data(amp_sc_local, anos, 'SJG ASC KDU')
 
+# Obter os dados filtrados do fluxo solar
+filtered_data = get_filtered_solar_flux_data()
 
+# Definindo os anos a serem plotados
+anos = [2019, 2020, 2021, 2022, 2023, 2024]
+
+# Chame a função para plotar amplificação por data e os dados do fluxo solar
+if filtered_data is not None:
+    plot_amplificacao_and_solar_flux(amp_sc_local, filtered_data, anos, 'SJG ASC KDU')
