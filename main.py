@@ -1,3 +1,21 @@
+import subprocess
+
+commands = [
+    "conda create -n my_environment python=3.9 -y",
+    "conda activate my_environment",
+    "conda install pandas matplotlib numpy scipy seaborn beautifulsoup4 -y",
+    "conda install -c conda-forge pywt pyigrf mplcursors -y",
+    "pip install requests"
+]
+
+for cmd in commands:
+    process = subprocess.run(cmd, shell=True)
+    if process.returncode != 0:
+        print(f"Erro ao executar: {cmd}")
+        break
+    
+#%%
+
 # -*- coding: utf-8 -*-
 from processamento import *
 
@@ -83,14 +101,14 @@ my_list_filtered = filter_by_quality(my_list, estacoes_conjugadas,limite=0)
 # my_list_filtered = my_list
 #%%
 plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_H_nT')
-plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao_dH_nT_abs", titulo="" , save_path = 'historico_amplificacao_ano_dH_nT_abs')
-plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao_dH_nT_absacumulado", titulo="" , save_path = 'historico_amplificacao_ano_dH_nT_absacumulado')
+plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao_dH_nT_abs", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_dH_nT_abs')
+plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao_dH_nT_absacumulado", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_dH_nT_absacumulado')
 
-plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao", titulo="" , save_path = 'historico_amplificacao_ano_barra_H_nT')
-plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao_dH_nT_abs", titulo="" , save_path = 'historico_amplificacao_ano_barra_dH_abs')
-plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao_dH_nT_absacumulado", titulo="" , save_path = 'historico_amplificacao_ano_barra_dH_absacumulado')
+plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_barra_H_nT')
+plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao_dH_nT_abs", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_barra_dH_abs')
+plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao_dH_nT_absacumulado", titulo="" , save_path = 'Resultados/historico_amplificacao_ano_barra_dH_absacumulado')
 
-plot_grouped_bars_by_month(my_list, stations,"Qualidade", titulo="" , save_path = 'historico_qualidade_ano_barra_H_nT')
+plot_grouped_bars_by_month(my_list, stations,"Qualidade", titulo="" , save_path = 'Resultados/historico_qualidade_ano_barra_H_nT')
 
 # plot_bar_chart_for_stations(my_list_filtered, stations,"Amplificacao", titulo="Distribuição de amplificação \n por par de estação conjulgadas" ,save_path = 'historico_amplificacao_estacao_barra')
 # plot_scatter_for_stations(my_list_filtered, stations,"Amplificacao", titulo="Distribuição de amplificação \n por par de estação conjulgadas" ,save_path = 'historico_amplificacao_estacao_pontos')
@@ -102,16 +120,16 @@ plot_event_data(my_list_filtered, intervalo = intervalo, event_dates = event_dat
 plot_event_data(my_list_filtered, intervalo = intervalo, event_dates = event_dates, colunas_eixo_esquerdo=[('dH_nT_absacumulado', 'Principal'), ('dH_nT_absacumulado', 'Conjugada')], colunas_eixo_direito=[('dH_nT_abs', 'Principal'), ('dH_nT_abs', 'Conjugada')],parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao_dH_nT_abs', 'Principal')], stations = stations, salvar_pdf=True, datafile_name = 'detalhes_dH_nT_absacumulado',view_points=True)
 
 #%%%
-plot_field_by_local_time(my_list_filtered, stations,"Amplificacao", titulo="" , save_path = 'TempoLocal_H_nT')
+plot_field_by_local_time(my_list_filtered, stations,"Amplificacao", titulo="" , save_path = 'Resultados/TempoLocal_H_nT')
 mplcursors.cursor(hover=True) 
-plot_frequency_bars(my_list_filtered, stations, "Amplificacao", titulo="" , save_path = 'TempoLocal_H_nT_barra')
+plot_frequency_bars(my_list_filtered, stations, "Amplificacao", titulo="" , save_path = 'Resultados/TempoLocal_H_nT_barra')
 
 #%%
 flux_data = get_filtered_solar_flux_data()
 #%%
 plt.close('all')
 
-plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations)
+plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations,save_path = 'Resultados/Amplificacao_fluxosolar')
 
 
 #%%

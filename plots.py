@@ -580,7 +580,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
 
     # Cria um PDF para salvar os gráficos se salvar_pdf for True
     if salvar_pdf:
-        pdf = PdfPages(datafile_name + '.pdf')
+        pdf = PdfPages('Resultados/'+ datafile_name + '.pdf')
 
     # Divide os eventos em páginas com no máximo 2 eventos por página
     for page_start in range(0, num_events, eventos_por_pagina):
