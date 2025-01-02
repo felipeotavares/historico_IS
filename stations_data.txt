@@ -1,4 +1,3 @@
-
 "AAE": {"lat": 9.035, "lon": 38.770, "city": "Addis Ababa", "local": "Intermag"},
 "ABG": {"lat": 18.638, "lon": 72.872, "city": "Alibag", "local": "Intermag"},
 "ABK": {"lat": 68.358, "lon": 18.823, "city": "Abisko", "local": "Intermag"},
@@ -86,7 +85,6 @@
 "LRM": {"lat": -22.220, "lon": 114.100, "city": "Learmonth", "local": "Intermag"},
 "LVV": {"lat": 49.900, "lon": 23.750, "city": "Lviv", "local": "Intermag"},
 "LYC": {"lat": 64.612, "lon": 18.748, "city": "Lycksele", "local": "Intermag"},
-
 "LZH": {"lat": 36.087, "lon": 103.845, "city": "Lanzhou", "local": "Intermag"},
 "MAB": {"lat": 50.298, "lon": 5.682, "city": "Manhay", "local": "Intermag"},
 "MAW": {"lat": -67.600, "lon": 62.880, "city": "Mawson", "local": "Intermag"},
@@ -151,7 +149,6 @@
 "WNG": {"lat": 53.725, "lon": 9.053, "city": "Wingst", "local": "Intermag"},
 "YAK": {"lat": 61.960, "lon": 129.660, "city": "Yakutsk", "local": "Intermag"},
 "YKC": {"lat": 62.480, "lon": -114.482, "city": "Yellowknife", "local": "Intermag"},
-
 "BOA": {"lat": 2.800556, "lon": -60.675833, "city": "Boa Vista", "local": "Embrace"},
 "MAN": {"lat": -2.888333, "lon": -59.969722, "city": "Manaus", "local": "Embrace"},
 "PVE": {"lat": -8.763611, "lon": -63.906389, "city": "Porto Velho", "local": "Embrace"},
