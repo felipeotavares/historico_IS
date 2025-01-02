@@ -1,0 +1,48 @@
+ Format                 IAGA-2002                                    |
+ Source of Data         Ebre Observatory, Spain                      |
+ Station Name           Sudden Commencements                         |
+ IAGA CODE              SC                                           |
+ Geodetic Latitude                                                   |
+ Geodetic Longitude                                                  |
+ Elevation                                                           |
+ Reported               various information about SC events          |
+ Sensor Orientation                                                  |
+ Digital Sampling                                                    |
+ Data Interval Type     depending of the number of events            |
+ Data Type              Provisional                                  |
+ # Converted to IAGA2002 format by the International Service of      |
+ #  Geomagnetic indices (ISGI, https://isgi.unistra.fr)              |
+ # MDUR : mean SC duration or rise-time in minutes                   |
+ # MAMP : mean amplitude in nT. value 9999 if undefined              |
+ # CODES : qualification codes corresponding to each observatory.    |
+ #   3 or 2: the event can be unmistakably identified as being an SC |
+ #   from the single record under consideration. Number 3 is imposed |
+ #   instead of 2 when the following three features are present: a)  |
+ #   very sharp change of rhythm, b) large amplitude of the sudden   |
+ #   movement, c) remarkably morphology of it.                       |
+ #   1: means that the event seen in this particular record is       |
+ #   possibly an SC, but it is not sufficiently clear by itself for  |
+ #   stating that it is a true SC: One need records from other       |
+ #   longitudes for getting a firm judgement                         |
+ #   0: means that the event, such as it appears in the record, could|
+ #   escape from the attention of the observer, or does not deserve  |
+ #   to be called an SC.                                             |
+ #   Left blank if undefined.                                        |
+ # TYPE : type of event, SSC (Storm Sudden Commencement) or          |
+ #   SI (Sudden Impulse). Left blank if undefined                    |
+ # OBSERVATORIES : Code of the five low latitude observatories       |
+ # DURATION : duration or rise-time in minutes for each observatory  |
+ # AMPLITUDE : amplitude in nT for each observatory                  |
+ #                                                                   |
+ # License: CC BY-NC                                                 |
+ #          https://creativecommons.org/licenses/by-nc/4.0/          |
+ #                                                                   |
+ # For more information on SC events, please visit the               |
+ #  International Service on Rapid Magnetic Variations of Ebre       |
+ #  Observatory :                                                    |
+ #  httpd://www.obsebre.es/en/rapid                                  |
+DATE       TIME         DOY MDUR   MAMP    CODES   TYPE    OBSERVATORIES       DURATION                AMPLITUDE            |
+2020-04-20 02:31:00.000 111  6.2   11.4  1 2 2 2 2  SSC HON SJG GUI ABG KNY  7  6  6  6  6    7.1    9.8   10.7   13.8   15.6
+2020-10-19 14:41:00.000 293  5.4   16.2  3 2 2 2 3  SSC HON SJG TAM ABG KNY  5  6  5  6  5   13.4    9.5   14.7   21.1   22.1
+2020-10-23 13:20:00.000 297  4.2    9.6  0 1 1 1 1  SSC HON SJG TAM ABG KNY  4  5  4  4  4    7.3    7.3   11.4   11.0   10.8
+2020-12-10 02:09:00.000 345  3.4   21.0  3 3 3 3 3  SSC HON SJG GUI HYB KNY  3  4  4  3  3   20.2   18.5   19.5   25.1   21.8
