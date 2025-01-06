@@ -204,9 +204,12 @@ def process_data(file_path):
                 # coloca o primeiro dado da serie como o "zero" (ajuste de offset)
                 df[f'{station_name}H1'] = df[f'{station_name}H'] - df[f'{station_name}H'][0]
                 df[f'{station_name}D1'] = df[f'{station_name}D'] - df[f'{station_name}D'][0]
+                df[f'{station_name}Z1'] = df[f'{station_name}Z'] - df[f'{station_name}Z'][0]
                 
                 df['H_nT'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H1'])
                 df['D_deg'] = np.where(df[f'{station_name}D'] > 99999, np.nan, df[f'{station_name}D1']/60) #converte de arc min para deg
+                df['Z_nT'] = np.where(df[f'{station_name}Z'] > 99999, np.nan, df[f'{station_name}Z1'])
+                
                 # campo normalizado com componente F
                 df['H_nT_norm'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H']/df[f'{station_name}F'])
                 # campo sem ajuste de offset
@@ -220,8 +223,11 @@ def process_data(file_path):
 
                 df[f'{station_name}H'] = df['H(nT)'] - df['H(nT)'][0]
                 df[f'{station_name}D'] = df['D(Deg)'] - df['D(Deg)'][0]
+                df[f'{station_name}Z'] = df['Z(nT)'] - df['Z(nT)'][0]
                 df['H_nT'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H'])
                 df['D_deg'] = np.where(df[f'{station_name}D'] > 99999, np.nan, df[f'{station_name}D'])
+                df['Z_nT'] = np.where(df[f'{station_name}Z'] > 99999, np.nan, df[f'{station_name}Z'])
+                
                 # campo normalizado com componente F
                 df['H_nT_norm'] = np.where(df['H(nT)'] > 99999, np.nan, df['H(nT)']/df['F(nT)'])
                 # campo sem ajuste de offset
@@ -239,11 +245,12 @@ def process_data(file_path):
             # df = detectar_anomalias(df,colunas=['H_nT'])
             df['dH_nT'] = df['H_nT'].diff()
             df['dD_deg'] = df['D_deg'].diff()
+            df['dZ_nT'] = df['Z_nT'].diff()
                         
         except Exception as e:
             return None, None
 
-        return df[['TIME','H_nT_source', 'H_nT_norm','H_nT', 'dH_nT', 'D_deg','dD_deg']], station_name
+        return df[['TIME','H_nT_source', 'H_nT_norm','H_nT', 'dH_nT', 'D_deg','dD_deg','Z_nT', 'dZ_nT']], station_name
 
     except Exception as e:
         return None, None
@@ -759,7 +766,7 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
 #     # data_list = [entry for entry in data_list if entry['Qualidade'] >= 0.8]
     
 #     return data_list
-def quality_data_test(data_list, colunas_intervalo={'H_nT': (-100, 100)}):
+def quality_data_test(data_list, intervalo=(-100, 100),campo = 'H_nT'):
     """
     Avalia a qualidade dos dados de uma lista de DataFrames com base em valores válidos, valores não nulos e intervalo de faixas.
     Retorna uma métrica única de qualidade entre 0 e 1 para cada entrada.
@@ -797,22 +804,22 @@ def quality_data_test(data_list, colunas_intervalo={'H_nT': (-100, 100)}):
         total_linhas = len(dados_janela)
 
         # 1. Porcentagem de valores válidos (não NaN) para a coluna 'H_nT'
-        if 'H_nT' in dados_janela.columns:
-            porcentagem_validos = dados_janela['H_nT'].notna().mean()
+        if campo in dados_janela.columns:
+            porcentagem_validos = dados_janela[campo].notna().mean()
         else:
             porcentagem_validos = 0
 
         # 2. Porcentagem de valores não nulos para a coluna 'H_nT' (1 se não houver zeros, 0 se apenas zeros)
-        if 'H_nT' in dados_janela.columns:
-            total_zeros = (dados_janela['H_nT'] == 0).sum()
+        if campo in dados_janela.columns:
+            total_zeros = (dados_janela[campo] == 0).sum()
             porcentagem_nao_nulos = 1 - (total_zeros / total_linhas if total_linhas > 0 else 0)
         else:
             porcentagem_nao_nulos = 0
 
         # 3. Porcentagem de valores dentro do intervalo definido para 'H_nT'
-        if 'H_nT' in dados_janela.columns and 'H_nT' in colunas_intervalo:
-            min_val, max_val = colunas_intervalo['H_nT']
-            porcentagem_dentro_faixa = dados_janela['H_nT'].between(min_val, max_val).mean()
+        if campo in dados_janela.columns:
+            min_val, max_val = intervalo
+            porcentagem_dentro_faixa = dados_janela[campo].between(min_val, max_val).mean()
         else:
             porcentagem_dentro_faixa = 0
 
@@ -822,7 +829,7 @@ def quality_data_test(data_list, colunas_intervalo={'H_nT': (-100, 100)}):
         # Garantir que a pontuação esteja entre 0 e 1
         entry['Qualidade'] = min(max(pontuacao_qualidade, 0), 1)
 
-        print(f"{entry['Estacao']} -> {entry['DataHora']} -> Qualidade: {entry['Qualidade']:.2f}")
+        print(f"{entry['Estacao']} -> {entry['DataHora']} -> {porcentagem_validos}/{porcentagem_nao_nulos}/{porcentagem_dentro_faixa} Qualidade: {entry['Qualidade']:.2f}")
 
     return data_list
 
@@ -1058,10 +1065,10 @@ def derivativas(dados_por_data):
             item['Dados'] = df_dados
             continue  # Passa para o próximo item
 
-
         # df = detectar_anomalias(df,colunas=['H_nT'])
         df_dados['dH_nT'] = df_dados['H_nT'].diff()
         df_dados['dD_deg'] = df_dados['D_deg'].diff()
+        df_dados['dZ_nT'] = df_dados['Z_nT'].diff()
 
         # Aplica média móvel
         df_dados['H_nT_movmean'] = df_dados['H_nT'].rolling(window=20, center=True).mean()
@@ -1088,7 +1095,6 @@ def derivativas(dados_por_data):
         
         df_dados['dH_nT_absacumulado_ajuste'], amplitude_E, ponto_esquerda_E, ponto_direita_E, residual_E, r_squared_E, rmse_E = caract_wavelet_amplitude(df_dados, 'dH_nT_absacumulado')
 
-        
         # df_dados['dH_nT_abs_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, 'dH_nT_abs')
         # df_dados['dH_nT_abs_ajuste'], amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, 'dH_nT_abs')
 
@@ -1186,7 +1192,6 @@ def calculate_conjugate_difference(data_list):
     Retorna:
         list: Lista atualizada com a diferença adicionada como uma nova coluna "dH_nT_diff" no DataFrame "Dados".
     """
-
     # Cria um dicionário para indexar dados por estação e DataHora para fácil consulta
     data_index = {}
     for entry in data_list:
@@ -1207,13 +1212,10 @@ def calculate_conjugate_difference(data_list):
             conjugate_entry = data_index.get(conjugate_station, {}).get(datahora)
             if conjugate_entry:
                 entry['Dados']['dH_nT_diff'] = entry['Dados']['dH_nT'] - conjugate_entry['Dados']['dH_nT']              
-                entry['Dados']['dH_nT_absacumulado_diff'] = entry['Dados']['dH_nT_absacumulado'] - conjugate_entry['Dados']['dH_nT_absacumulado']
             else:
                 entry['Dados']['dH_nT_diff'] = None  # Definir como None se os dados da conjugada não estiverem disponíveis
-                entry['Dados']['dH_nT_absacumulado_diff'] = None
         else:
             entry['Dados']['dH_nT_diff'] = None  # Definir como None se não houver estação conjugada
-            entry['Dados']['dH_nT_absacumulado_diff'] = None
     
     return data_list
 
@@ -1402,6 +1404,8 @@ def caract_wavelet_amplitude(dados_janela, coluna, wavelet='db4', level=2):
     # Reconstruir o sinal detalhado de maior escala (primeira decomposição de detalhe)
     # y_detail = pywt.waverec([coeffs[0]] + [np.zeros_like(c) for c in coeffs[1:]], wavelet)
     y_detail = pywt.waverec(coeffs, wavelet)
+    type(y_detail)
+    
       
     # Garantir que y_detail tenha o mesmo comprimento que y_data
     y_detail = y_detail[:len(y_data)]
@@ -1860,3 +1864,389 @@ def load_data(file_path):
 # metadata, data_list = load_data('selected_statios_full_singnal.pkl')
 
 # metadata2, data_list2 = load_data('selected_statios_just_events.pkl')
+#%% testes 2
+def derivativas2(dados_por_data, campo='H_nT', sinal = 'pc5'):
+    for item in dados_por_data:
+        df_dados = item['Dados']
+
+        # Avalia se o DataFrame possui muitos NaN
+        if df_dados.empty or df_dados[campo].isna().mean() > 0.20:  # Exemplo: mais de 20% de NaN
+            # Caso haja muitos NaNs, atribui NaN aos campos de interesse
+            item['Ponto_Esquerda_A'] = float('nan')
+            item['Ponto_Direita_A'] = float('nan')
+            item['Residual_A'] = float('nan')
+            item['R_squared_A'] = float('nan')
+            item['RMSE_A'] = float('nan')
+            item['Amplitude'] = float('nan')
+
+            for col in [f'{campo}_movmean', f'd{campo}_movmean', f'{campo}_ajuste',
+                        'D_deg_ajuste', f'd{campo}_abs', f'd{campo}_absacumulado', f'd{campo}_drmsacumulado']:
+                df_dados[col] = float('nan')
+
+            df_dados['DateTime'] = float('nan')
+
+            for suffix in ['D', 'E']:
+                for metric in ['Ponto_Esquerda', 'Ponto_Direita', 'Residual', 'R_squared', 'RMSE', 'Amplitude']:
+                    item[f'{metric}_{suffix}'] = float('nan')
+
+            item['Dados'] = df_dados
+            continue  # Passa para o próximo item
+
+        # Calcula diferenças
+        df_dados[f'd{campo}'] = df_dados[campo].diff()
+        # df_dados['dD_deg'] = df_dados['D_deg'].diff()
+        # df_dados['dZ_nT'] = df_dados['Z_nT'].diff()
+
+        # Aplica média móvel
+        df_dados[f'{campo}_movmean'] = df_dados[campo].rolling(window=20, center=True).mean()
+
+        # Calcula a derivada
+        df_dados[f'd{campo}_movmean'] = df_dados[f'{campo}_movmean'].diff()
+
+        # Aplica a função de ajuste e calcula parâmetros
+        if sinal == 'pc5':
+            ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_iir_amplitude(df_dados, campo, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2)
+        elif sinal == 'h':
+            ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, campo)
+        else:
+            print(f"Tipo de sinal '{sinal}' não reconhecido. Use 'pc5' ou 'H'.")
+        
+        df_dados[f'{campo}_ajuste'] = ajuste
+
+        df_dados[f'd{campo}_abs'] = df_dados[f'd{campo}'].abs()
+        df_dados[f'd{campo}_absacumulado'] = df_dados[f'd{campo}_abs'].cumsum()
+        df_dados[f'd{campo}_drmsacumulado'] = df_dados[f'd{campo}_absacumulado'].diff()
+
+        ajuste_abs, amplitude_D, ponto_esquerda_D, ponto_direita_D, residual_D, r_squared_D, rmse_D = caract_wavelet_amplitude(df_dados, f'd{campo}_abs')
+        ajuste_acum, amplitude_E, ponto_esquerda_E, ponto_direita_E, residual_E, r_squared_E, rmse_E = caract_wavelet_amplitude(df_dados, f'd{campo}_absacumulado')
+
+        df_dados[f'd{campo}_abs_ajuste'] = ajuste_abs
+        df_dados[f'd{campo}_absacumulado_ajuste'] = ajuste_acum
+
+        df_dados['DateTime'] = df_dados['TIME']
+
+        # Atribui valores calculados ao item
+        item['Ponto_Esquerda_A'] = ponto_esquerda
+        item['Ponto_Direita_A'] = ponto_direita
+        item['Residual_A'] = residual
+        item['R_squared_A'] = r_squared
+        item['RMSE_A'] = rmse
+        item['Amplitude'] = amplitude
+
+        item['Ponto_Esquerda_D'] = ponto_esquerda_D
+        item['Ponto_Direita_D'] = ponto_direita_D
+        item['Residual_D'] = residual_D
+        item['R_squared_D'] = r_squared_D
+        item['RMSE_D'] = rmse_D
+        item['Amplitude_D'] = amplitude_D
+
+        item['Ponto_Esquerda_E'] = ponto_esquerda_E
+        item['Ponto_Direita_E'] = ponto_direita_E
+        item['Residual_E'] = residual_E
+        item['R_squared_E'] = r_squared_E
+        item['RMSE_E'] = rmse_E
+        item['Amplitude_E'] = amplitude_E
+
+        item['Dados'] = df_dados
+
+    return dados_por_data
+
+
+def calculate_conjugate_difference2(data_list, campo='dH_nT'):
+    # data_list = amp_sc_local 
+    """
+    Calcula a diferença nos valores do campo especificado entre cada estação e sua estação conjugada
+    para cada "DataHora" disponível.
+
+    Parâmetros:
+        data_list (list): Lista de dicionários contendo dados das estações.
+        campo (str): Nome do campo para o qual calcular a diferença. Default é 'dH_nT'.
+
+    Retorna:
+        list: Lista atualizada com a diferença adicionada como uma nova coluna "<campo>_diff" no DataFrame "Dados".
+    """
+    # Cria um dicionário para indexar dados por estação e DataHora para fácil consulta
+    data_index = {}
+    for entry in data_list:
+        station = entry.get('Estacao')
+        datahora = entry.get('DataHora')
+        if station and datahora:
+            if station not in data_index:
+                data_index[station] = {}
+            data_index[station][datahora] = entry
+
+    # Calcula a diferença no campo especificado entre cada estação e sua conjugada
+    for entry in data_list:
+        conjugate_station = entry.get('Conjugada')
+        datahora = entry.get('DataHora')
+        if conjugate_station and datahora:
+            conjugate_entry = data_index.get(conjugate_station, {}).get(datahora)
+            if conjugate_entry:
+                entry['Dados'][f'{campo}_diff'] = entry['Dados'][campo] - conjugate_entry['Dados'][campo]
+            else:
+                entry['Dados'][f'{campo}_diff'] = None  # Definir como None se os dados da conjugada não estiverem disponíveis
+        else:
+            entry['Dados'][f'{campo}_diff'] = None  # Definir como None se não houver estação conjugada
+
+    return data_list
+
+def estatisticas2(dados_por_data, campo='dH_nT_absacumulado_diff'):
+    for item in dados_por_data:
+        df_dados = item['Dados']
+
+        # Cálculo do RMSE entre os valores do campo especificado
+        mse = ((df_dados[campo]) ** 2).mean()
+        rmse = np.sqrt(mse)
+        item[f'RMSE_{campo}'] = rmse
+                
+    return dados_por_data
+
+def amplificacao_D_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 'H_nT'):
+
+    #opção para calcular amplificação para cada estação conjugada
+    # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
+
+    eventos_com_amplificacao = []
+    
+    # Crie um dicionário para armazenar amplitudes por DataHora e Estação
+    amplitudes_por_datahora = {}
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        amplitude = evento['Amplitude_D']
+        
+        if datahora not in amplitudes_por_datahora:
+            amplitudes_por_datahora[datahora] = {}
+        
+        amplitudes_por_datahora[datahora][estacao] = amplitude
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        
+        amplificacao = None
+        
+        if datahora in amplitudes_por_datahora:
+            # estacao_conjugada_nome = estacoes_conjugadas.get(estacao, estacoes_conjugadas_reverso.get(estacao))
+            estacao_conjugada_nome = estacoes_conjugadas.get(estacao, None)
+
+            if estacao_conjugada_nome:
+                conjugada_amplitude = amplitudes_por_datahora[datahora].get(estacao_conjugada_nome, None)
+                
+                if conjugada_amplitude is not None and conjugada_amplitude != 0:
+                    estacao_amplitude = amplitudes_por_datahora[datahora].get(estacao, None)
+                    if estacao_amplitude is not None:
+                        amplificacao = estacao_amplitude / conjugada_amplitude
+                else:
+                    amplificacao = None
+            else:
+                amplificacao = None
+        
+        evento_com_amplificacao = evento.copy()
+        evento_com_amplificacao[f'Amplificacao_{campo}'] = amplificacao
+        eventos_com_amplificacao.append(evento_com_amplificacao)
+    
+    return eventos_com_amplificacao
+
+def amplificacao_E_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 'H_nT'):
+
+    #opção para calcular amplificação para cada estação conjugada
+    # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
+
+    eventos_com_amplificacao = []
+    
+    # Crie um dicionário para armazenar amplitudes por DataHora e Estação
+    amplitudes_por_datahora = {}
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        amplitude = evento['Amplitude_E']
+        
+        if datahora not in amplitudes_por_datahora:
+            amplitudes_por_datahora[datahora] = {}
+        
+        amplitudes_por_datahora[datahora][estacao] = amplitude
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        
+        amplificacao = None
+        
+        if datahora in amplitudes_por_datahora:
+            # estacao_conjugada_nome = estacoes_conjugadas.get(estacao, estacoes_conjugadas_reverso.get(estacao))
+            estacao_conjugada_nome = estacoes_conjugadas.get(estacao, None)
+
+            if estacao_conjugada_nome:
+                conjugada_amplitude = amplitudes_por_datahora[datahora].get(estacao_conjugada_nome, None)
+                
+                if conjugada_amplitude is not None and conjugada_amplitude != 0:
+                    estacao_amplitude = amplitudes_por_datahora[datahora].get(estacao, None)
+                    if estacao_amplitude is not None:
+                        amplificacao = estacao_amplitude / conjugada_amplitude
+                else:
+                    amplificacao = None
+            else:
+                amplificacao = None
+        
+        evento_com_amplificacao = evento.copy()
+        evento_com_amplificacao[f'Amplificacao_{campo}'] = amplificacao
+        eventos_com_amplificacao.append(evento_com_amplificacao)
+    
+    return eventos_com_amplificacao
+def caract_iir_amplitude(dados_janela, coluna, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2):
+    """
+    Função para calcular a amplitude de um sinal filtrado usando filtro IIR bandpass.
+
+    Parâmetros:
+        - dados_janela: DataFrame com os dados.
+        - coluna: Nome da coluna com os valores do sinal.
+        - low_cut: Frequência de corte inferior em Hz.
+        - high_cut: Frequência de corte superior em Hz.
+        - fs: Frequência de amostragem em Hz (1 amostra por 60 segundos = 1/60 Hz).
+        - order: Ordem do filtro IIR.
+
+    Retorno:
+        - y_filtered: Sinal filtrado.
+        - L: Amplitude entre o máximo e o mínimo do sinal filtrado.
+        - ponto_esquerda: Posição e valor mínimo antes do máximo.
+        - ponto_direita: Posição e valor máximo.
+        - residual: Placeholder para valor residual.
+        - r_squared: Coeficiente de determinação.
+        - rmse: Erro médio quadrático.
+    """
+    # Extrair dados da coluna específica e preencher NaNs com interpolação
+    y_data = dados_janela[coluna].values
+    y_data = pd.Series(y_data).interpolate().ffill().bfill().values
+
+    # Remover infs
+    mask = ~np.isinf(y_data)
+    y_data = y_data[mask]
+
+    # Verificar se temos dados suficientes após remover infs e NaNs
+    if len(y_data) < 2 or np.isnan(y_data).all():
+        return np.nan, [np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    # Design do filtro IIR Butterworth bandpass
+    nyquist = 0.5 * fs  # Frequência de Nyquist
+    low = low_cut / nyquist
+    high = high_cut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+
+    # Aplicar o filtro
+    y_filtered = filtfilt(b, a, y_data)
+
+    # Índice do valor máximo na componente filtrada
+    max_idx = np.argmax(y_filtered)
+
+    # Procurar o índice do mínimo antes do máximo
+    if max_idx > 0:
+        min_idx = np.argmin(y_filtered[:max_idx])
+    else:
+        min_idx = max_idx  # Caso não haja valores antes do máximo, o mínimo será o próprio máximo
+
+    # Amplitude do SI como a diferença entre o máximo e o mínimo
+    L = y_filtered[max_idx] - y_filtered[min_idx]
+
+    # Verificar se os índices estão dentro do tamanho de dados_janela
+    if max_idx >= len(dados_janela) or min_idx >= len(dados_janela):
+        return np.nan, [np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    # Posições dos valores à esquerda e à direita (mínimo antes do máximo e o próprio máximo)
+    posicao_esquerda = dados_janela.iloc[min_idx]['TIME']
+    posicao_direita = dados_janela.iloc[max_idx]['TIME']
+
+    ponto_esquerda = [posicao_esquerda, y_filtered[min_idx]]
+    ponto_direita = [posicao_direita, y_filtered[max_idx]]
+
+    # Calcular o RMSE entre o sinal original e o sinal filtrado
+    rmse = np.sqrt(np.mean((y_data - y_filtered) ** 2))
+
+    # Cálculo do R²
+    ss_res = np.sum((y_data - y_filtered) ** 2)
+    ss_tot = np.sum((y_data - np.mean(y_data)) ** 2)
+    r_squared = 1 - (ss_res / ss_tot)
+
+    # Calcular o valor residual (placeholder)
+    residual = 0
+
+    return y_filtered, L, ponto_esquerda, ponto_direita, residual, r_squared, rmse
+
+#%%teste 3
+import numpy as np
+import matplotlib.pyplot as plt
+import pywt
+
+def compute_wavelet_scalogram(data, sampling_interval, wavelet='cmor', frequencies=None, plot_scalogram=True):
+    """
+    Compute the wavelet transform and scalogram using the Morlet wavelet.
+
+    Parameters:
+    - data: 1D array-like
+        Time series data to be transformed.
+    - sampling_interval: float
+        Time step between consecutive samples in the data (in seconds).
+    - wavelet: str, optional
+        Name of the wavelet to use (default: 'cmor').
+    - frequencies: array-like, optional
+        Frequencies of interest for the wavelet transform. If None, defaults to a logarithmic scale.
+    - plot_scalogram: bool, optional
+        Whether to plot the scalogram (default: True).
+
+    Returns:
+    - coeffs_squared: 2D numpy array
+        Squared wavelet coefficients (scalogram).
+    - frequencies: 1D numpy array
+        Frequencies corresponding to the rows of the scalogram.
+    - times: 1D numpy array
+        Time points corresponding to the columns of the scalogram.
+    """
+    # Validate data length
+    if len(data) <= 1:
+        raise ValueError("Data must have more than one sample.")
+    
+    # Calculate the sampling frequency
+    sampling_frequency = 1 / sampling_interval
+
+    # Determine the default frequencies if not provided
+    if frequencies is None:
+        frequencies = np.logspace(np.log10(1), np.log10(sampling_frequency / 2), num=50)
+
+    # Compute scales based on frequencies
+    scales = pywt.scale2frequency(wavelet, [1]) / frequencies
+    scales = scales.flatten()
+
+    # Compute wavelet transform
+    coeffs, freqs = pywt.cwt(data, scales, wavelet, sampling_period=sampling_interval)
+
+    # Compute squared coefficients (scalogram)
+    coeffs_squared = np.abs(coeffs) ** 2
+
+    # Generate time points
+    times = np.arange(len(data)) * sampling_interval
+
+    # Plot the scalogram if requested
+    if plot_scalogram:
+        plt.figure(figsize=(10, 6))
+        plt.contourf(times, frequencies, coeffs_squared, extend='both', cmap='viridis')
+        plt.colorbar(label='Power')
+        plt.yscale('log')
+        plt.ylabel('Frequency (Hz)')
+        plt.xlabel('Time (s)')
+        plt.title('Wavelet Scalogram')
+        plt.show()
+
+    return coeffs_squared, frequencies, times
+
+# Example usage
+if __name__ == "__main__":
+    # Example signal: sinusoidal + noise
+    sampling_interval = 0.01  # 100 Hz sampling rate
+    t = np.arange(0, 10, sampling_interval)
+    signal = np.sin(2 * np.pi * 5 * t) + np.sin(2 * np.pi * 20 * t) + 0.5 * np.random.randn(len(t))
+
+    # Compute the scalogram
+    scalogram, freqs, times = compute_wavelet_scalogram(signal, sampling_interval)
+

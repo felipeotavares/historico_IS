@@ -533,7 +533,7 @@ def buscar_anomalos(my_list, stations, field, condition):
 
 
 #%%teste
-def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, colunas_eixo_direito, stations, salvar_pdf=False, datafile_name='Teste', parametros=[], view_points=True):
+def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, colunas_eixo_direito, stations, titulo = "",salvar_pdf=False, datafile_name='Teste', parametros=[], view_points=True):
     """
     Plota os campos especificados para múltiplos eventos e múltiplas estações dentro de um intervalo de datas.
 
@@ -622,6 +622,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     else:
                         y_left_limits[j][0] = min(y_left_limits[j][0], min_val) * 1.05
                         y_left_limits[j][1] = max(y_left_limits[j][1], max_val) * 1.05
+                        
 
                 # Determina limites para o eixo y direito
                 if colunas_eixo_direito:
@@ -634,11 +635,18 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                             continue
 
                         min_val, max_val = data_series.min(), data_series.max()
+                        
                         if y_right_limits[j] is None:
-                            y_right_limits[j] = y_left_limits[j]
+                            # y_right_limits[j] = y_left_limits[j]  
+                            y_right_limits[j] = [min_val * 1.05, max_val * 1.05]
                         else:
-                            y_right_limits[j][0] = min(y_right_limits[j][0], min_val)
-                            y_right_limits[j][1] = y_left_limits[j][1]
+                            #seleciona limites eixo Y da direita igual da esquerda
+                            # y_right_limits[j][0] = min(y_right_limits[j][0], min_val)
+                            # y_right_limits[j][1] = y_left_limits[j][1]
+                            #seleciona limites eixo Y da direita fixo e independente da esquerda
+                            y_right_limits[j][0] = min(y_right_limits[j][0], min_val) * 1.05
+                            y_right_limits[j][1] = max(y_right_limits[j][1], max_val) * 1.05
+                            # print(f'{y_right_limits}=')
 
         # Segunda passagem: plotar os dados com os limites definidos
         for i, station in enumerate(stations):
@@ -668,6 +676,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     # Aplica os limites do eixo y direito
                     if all(math.isfinite(limit) for limit in y_right_limits[j]):
                         ax_right.set_ylim(y_right_limits[j])
+                        # print(f'direito = {y_right_limits}')
 
                 # Plota as colunas especificadas para a estação atual e evento no eixo y à esquerda
                 # for field, station_type in colunas_eixo_esquerdo:
@@ -721,7 +730,9 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                 sufixo_mapeamento = {
                     'dH_nT_abs': 'D',
                     'dH_nT_absacumulado': 'E',
-                    'H_nT': 'A',  # Exemplo adicional
+                    'H_nT': 'A',  
+                    'Z_nT': 'A', 
+                    'D_deg': 'A', 
                     'dH_nT_media': 'M',     # Outro exemplo
                 }
                 
@@ -759,6 +770,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                 # Aplica os limites do eixo y esquerdo
                 if all(math.isfinite(limit) for limit in y_left_limits[j]):
                     ax.set_ylim(y_left_limits[j])
+                    # print(f'esquerdo = {y_left_limits}')
 
                 # Adiciona os parâmetros especificados em uma caixa de texto no gráfico
                 parametros_texto = ""
@@ -775,7 +787,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
 
                 # Adiciona o título
                 if i == 0:
-                    ax.set_title(f"#{j + page_start} {event.strftime('%d/%m/%Y')} \n P:{station}/C:{main_data.get('Conjugada')}", fontweight='bold')
+                    ax.set_title(f"\n {titulo}\n #{j + page_start} {event.strftime('%d/%m/%Y')} \n P:{station}/C:{main_data.get('Conjugada')}", fontweight='bold')
                 else:
                     ax.set_title(f"P:{station}/C:{main_data.get('Conjugada')}", fontweight='bold')
 
@@ -792,6 +804,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     handles_combined = handles_left + handles_right
                     labels_combined = labels_left + labels_right
                     ax.legend(handles_combined, labels_combined, loc='upper right',fontsize=6)
+
 
         # Remove a legenda em nível de figura
         # handles_left, labels_left = ax.get_legend_handles_labels()

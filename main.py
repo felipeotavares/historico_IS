@@ -1,18 +1,18 @@
-import subprocess
+# import subprocess
 
-commands = [
-    "conda create -n my_environment python=3.9 -y",
-    "conda activate my_environment",
-    "conda install pandas matplotlib numpy scipy seaborn beautifulsoup4 -y",
-    "conda install -c conda-forge pywt pyigrf mplcursors -y",
-    "pip install requests"
-]
+# commands = [
+#     "conda create -n my_environment python=3.9 -y",
+#     "conda activate my_environment",
+#     "conda install pandas matplotlib numpy scipy seaborn beautifulsoup4 -y",
+#     "conda install -c conda-forge pywt pyigrf mplcursors -y",
+#     "pip install requests"
+# ]
 
-for cmd in commands:
-    process = subprocess.run(cmd, shell=True)
-    if process.returncode != 0:
-        print(f"Erro ao executar: {cmd}")
-        break
+# for cmd in commands:
+#     process = subprocess.run(cmd, shell=True)
+#     if process.returncode != 0:
+#         print(f"Erro ao executar: {cmd}")
+#         break
     
 #%%
 
@@ -68,7 +68,10 @@ eventos_sc_est = derivativas(eventos_sc)
 eventos_sc_est= quality_data_test(eventos_sc_est)
 
 amp_sc = amplificacao_estacoes(eventos_sc_est, estacoes_conjugadas)
+
+
 amp_sc = amplificacao_estacoes_dH_nT_abs(amp_sc, estacoes_conjugadas)
+
 amp_sc = amplificacao_estacoes_dH_nT_absacumulado(amp_sc, estacoes_conjugadas)
 
 
@@ -201,3 +204,13 @@ plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations,save_pa
 
 # max_values = df['H_nT_ajuste'].max()
 # print(max_values)
+#%%
+import subprocess
+
+# Lista de valores para a variável "campo"
+campos = ['H_nT', 'D_deg', 'Z_nT']
+# campos = ['H_nT']
+for campo in campos:
+    print(f"Executando script com o campo: {campo}")
+    # Chama o script principal e passa o valor de 'campo' como argumento
+    subprocess.run(['python', 'gerar_graficos.py', campo])
