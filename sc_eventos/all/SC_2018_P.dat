@@ -1,0 +1,55 @@
+ Format                 IAGA-2002                                    |
+ Source of Data         Ebre Observatory, Spain                      |
+ Station Name           Sudden Commencements                         |
+ IAGA CODE              SC                                           |
+ Geodetic Latitude                                                   |
+ Geodetic Longitude                                                  |
+ Elevation                                                           |
+ Reported               various information about SC events          |
+ Sensor Orientation                                                  |
+ Digital Sampling                                                    |
+ Data Interval Type     depending of the number of events            |
+ Data Type              Definitive                                   |
+ # Converted to IAGA2002 format by the International Service of      |
+ #  Geomagnetic indices (ISGI, https://isgi.unistra.fr)              |
+ # MDUR : mean SC duration or rise-time in minutes                   |
+ # MAMP : mean amplitude in nT. value 9999 if undefined              |
+ # CODES : qualification codes corresponding to each observatory.    |
+ #   3 or 2: the event can be unmistakably identified as being an SC |
+ #   from the single record under consideration. Number 3 is imposed |
+ #   instead of 2 when the following three features are present: a)  |
+ #   very sharp change of rhythm, b) large amplitude of the sudden   |
+ #   movement, c) remarkably morphology of it.                       |
+ #   1: means that the event seen in this particular record is       |
+ #   possibly an SC, but it is not sufficiently clear by itself for  |
+ #   stating that it is a true SC: One need records from other       |
+ #   longitudes for getting a firm judgement                         |
+ #   0: means that the event, such as it appears in the record, could|
+ #   escape from the attention of the observer, or does not deserve  |
+ #   to be called an SC.                                             |
+ #   Left blank if undefined.                                        |
+ # TYPE : type of event, SSC (Storm Sudden Commencement) or          |
+ #   SI (Sudden Impulse). Left blank if undefined                    |
+ # OBSERVATORIES : Code of the five low latitude observatories       |
+ # DURATION : duration or rise-time in minutes for each observatory  |
+ # AMPLITUDE : amplitude in nT for each observatory                  |
+ #                                                                   |
+ # License: CC BY-NC                                                 |
+ #          https://creativecommons.org/licenses/by-nc/4.0/          |
+ #                                                                   |
+ # For more information on SC events, please visit the               |
+ #  International Service on Rapid Magnetic Variations of Ebre       |
+ #  Observatory :                                                    |
+ #  https://www.obsebre.es/en/rapid                                  |
+DATE       TIME         DOY MDUR   MAMP    CODES   TYPE    OBSERVATORIES       DURATION                AMPLITUDE            |
+2018-01-08 06:46:00.000 008  5.6   20.7  3 3 3 3 3  SSC HON SJG MBO ABG KNY  4  5  7  6  6   17.4   14.1   20.4   28.5   22.9
+2018-02-15 08:35:00.000 046  8.6   14.8  2 2 3 3 2  SSC HON SJG MBO ABG KNY  9  9  8  8  9   10.9    9.9   20.2   19.3   13.8
+2018-03-09 18:06:00.000 068  5.8   16.4  3 3 3 3 3  SSC HON SJG MBO ABG KNY  6  6  5  6  6   12.3   13.1   19.7   18.8   17.9
+2018-04-20 00:21:00.000 110  6.0   24.3  3 3 3 3 3  SSC HON SJG MBO ABG KNY  6  6  6  6  6   20.9   20.6   30.1   26.5   23.5
+2018-05-05 10:25:00.000 125  5.2   16.4  3 2 2 2 3  SSC HON SJG MBO ABG KNY  6  5  5  5  5   15.7   12.5   21.5   16.1   16.3
+2018-05-22 12:18:00.000 142  5.2   10.4  2 1 2 2 2   SI HON SJG MBO ABG KNY  5  4  5  6  6    9.0    5.2   13.4   10.8   13.4
+2018-05-31 14:46:00.000 151  6.0    7.4  1 1 1 2 1  SSC HON SJG MBO ABG KNY  5  7  6  6  6    5.1    6.1    9.1    8.7    7.8
+2018-07-05 17:52:00.000 186  3.8   12.9  2 2 2 2 2  SSC HON SJG MBO ABG KNY  3  4  4  4  4    9.4   11.5   14.0   12.9   16.9
+2018-07-30 11:58:00.000 211  6.8    7.6  1 1 2 1 2   SI HON SJG MBO ABG KNY  7  9  6  6  6    6.0    4.6   12.1    6.7    8.6
+2018-09-29 00:53:00.000 272  6.6    9.0  1 1 2 2 1  SSC HON SJG GUI ABG KNY  7  7  7  6  6    6.8    7.8   11.5   10.1    8.7
+2018-10-13 17:34:00.000 286  3.2    8.1  2 1 0 2 1   SI HON SJG GUI ABG KNY  4  2  2  4  4    8.9    3.7    3.3   11.1   13.6
