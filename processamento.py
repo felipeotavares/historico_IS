@@ -202,13 +202,10 @@ def process_data(file_path):
                     df[f'{station_name}D'] = np.arctan2(df[f'{station_name}Y'], df[f'{station_name}X'])* (180 / np.pi) * 60  #converte de rad para arc min
                     df[f'{station_name}F'] = np.sqrt(df[f'{station_name}X']**2 + df[f'{station_name}Y']**2 + df[f'{station_name}Z']**2)
                 # coloca o primeiro dado da serie como o "zero" (ajuste de offset)
-                df[f'{station_name}H1'] = df[f'{station_name}H'] - df[f'{station_name}H'][0]
-                df[f'{station_name}D1'] = df[f'{station_name}D'] - df[f'{station_name}D'][0]
-                df[f'{station_name}Z1'] = df[f'{station_name}Z'] - df[f'{station_name}Z'][0]
-                
-                df['H_nT'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H1'])
-                df['D_deg'] = np.where(df[f'{station_name}D'] > 99999, np.nan, df[f'{station_name}D1']/60) #converte de arc min para deg
-                df['Z_nT'] = np.where(df[f'{station_name}Z'] > 99999, np.nan, df[f'{station_name}Z1'])
+           
+                df['H_nT'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H'])
+                df['D_deg'] = np.where(df[f'{station_name}D'] > 99999, np.nan, df[f'{station_name}D']/60) #converte de arc min para deg
+                df['Z_nT'] = np.where(df[f'{station_name}Z'] > 99999, np.nan, df[f'{station_name}Z'])
                 
                 # campo normalizado com componente F
                 df['H_nT_norm'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H']/df[f'{station_name}F'])
@@ -221,9 +218,9 @@ def process_data(file_path):
                 df['DATETIME'] = df['DATE'] + df['TIME']
                 df['TIME'] = df['DATETIME'].dt.hour + df['DATETIME'].dt.minute / 60 + df['DATETIME'].dt.second / 3600
 
-                df[f'{station_name}H'] = df['H(nT)'] - df['H(nT)'][0]
-                df[f'{station_name}D'] = df['D(Deg)'] - df['D(Deg)'][0]
-                df[f'{station_name}Z'] = df['Z(nT)'] - df['Z(nT)'][0]
+                df[f'{station_name}H'] = df['H(nT)']
+                df[f'{station_name}D'] = df['D(Deg)'] 
+                df[f'{station_name}Z'] = df['Z(nT)']
                 df['H_nT'] = np.where(df[f'{station_name}H'] > 99999, np.nan, df[f'{station_name}H'])
                 df['D_deg'] = np.where(df[f'{station_name}D'] > 99999, np.nan, df[f'{station_name}D'])
                 df['Z_nT'] = np.where(df[f'{station_name}Z'] > 99999, np.nan, df[f'{station_name}Z'])
@@ -426,7 +423,7 @@ def download_embrace(files_folder, date_str, station, duration):
 
         response = requests.get(final_url, verify=False)
         if response.status_code != 200:
-            print(f"Failed to access data for {current_date.strftime('%Y-%m-%d')}")
+            print(f"Failed to access data for {station} {current_date.strftime('%Y-%m-%d')}")
             continue
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -583,8 +580,8 @@ def get_events_dates(folder):
             # Ler os eventos do arquivo e converter a coluna TIME para decimal
             # print(file_path)
             hora_especifica = read_data_eventos(file_path)
-            
             hora_especifica['TIME'] = hora_especifica['TIME'].apply(time_to_decimal_24)
+
             all_data.append(hora_especifica)
 
     # Combina todos os DataFrames em um único DataFrame
@@ -683,7 +680,11 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
                         altitude = stations_info[estacao]['altitude'] / 1000  # Converte para km
                         ano = data_hora.year
 
-                        D, I, H, X, Y, Z, F = pyIGRF.igrf_value(lat, lon, altitude, ano)
+                        if lon < 0:
+                            elong = lon + 360  # Adiciona 360 para longitudes negativas
+                        else:
+                            elong = lon
+                        D, I, H, X, Y, Z, F = pyIGRF.igrf_value(lat, elong, altitude, ano)
 
                         dados_por_data.append({
                             'DataHora': data_hora,
@@ -694,7 +695,9 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
                             'Latitude': lat,
                             'Longitude': lon,
                             'Altitude': altitude,
-                            'igrf_H': H
+                            'igrf_H_nT': H,
+                            'igrf_D_deg': D,
+                            'igrf_Z_nT': Z
                         })
 
     return dados_por_data
@@ -766,19 +769,22 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
 #     # data_list = [entry for entry in data_list if entry['Qualidade'] >= 0.8]
     
 #     return data_list
-def quality_data_test(data_list, intervalo=(-100, 100),campo = 'H_nT'):
+def quality_data_test(data, intervalo=(-100, 100), campo='H_nT'):
     """
-    Avalia a qualidade dos dados de uma lista de DataFrames com base em valores válidos, valores não nulos e intervalo de faixas.
+    Avalia a qualidade dos dados de uma lista de DataFrames com base em valores válidos, valores não nulos, intervalo de faixas
+    e repetição sequencial de valores (para identificar possíveis erros de sensores).
+    
     Retorna uma métrica única de qualidade entre 0 e 1 para cada entrada.
 
     Parâmetros:
-    data_list (list): Lista de dicionários, cada um contendo um DataFrame a ser avaliado.
-    colunas_intervalo (dict): Dicionário onde as chaves são os nomes das colunas e os valores são tuplas (min, max)
-                              indicando o intervalo válido para cada coluna.
+    data (list): Lista de dicionários, cada um contendo um DataFrame a ser avaliado.
+    intervalo (tuple): Tupla indicando o intervalo válido para os valores (mínimo, máximo).
+    campo (str): Nome da coluna que será avaliada.
 
     Retorna:
-    list: Lista de dicionários com a métrica de qualidade.
+    list: Lista de dicionários com a métrica de qualidade para cada entrada.
     """
+    data_list = data
     for entry in data_list:
         df = entry.get('Dados')
         evento_time = entry.get('DataHora')  # Momento central do evento, tipo datetime
@@ -823,13 +829,31 @@ def quality_data_test(data_list, intervalo=(-100, 100),campo = 'H_nT'):
         else:
             porcentagem_dentro_faixa = 0
 
-        # 4. Cálculo da pontuação final de qualidade
-        pontuacao_qualidade = (porcentagem_validos + porcentagem_nao_nulos + porcentagem_dentro_faixa) / 3
+        # 4. Verificação de repetição sequencial de valores na coluna 'H_nT'
+        if campo in dados_janela.columns:
+            repeticoes_sequenciais = (dados_janela[campo].diff() == 0).sum()
+            porcentagem_sem_repeticao = 1 - (repeticoes_sequenciais / total_linhas if total_linhas > 0 else 0)
+        else:
+            porcentagem_sem_repeticao = 0
+
+        # 5. Cálculo da pontuação final de qualidade
+        pontuacao_qualidade = (
+            porcentagem_validos + 
+            porcentagem_nao_nulos + 
+            porcentagem_dentro_faixa + 
+            porcentagem_sem_repeticao
+        ) / 4
 
         # Garantir que a pontuação esteja entre 0 e 1
         entry['Qualidade'] = min(max(pontuacao_qualidade, 0), 1)
+        entry['Qualidade verbose'] = (
+            f"{entry['Estacao']} -> {entry['DataHora']} -> "
+            f"validos:{porcentagem_validos:.2f}/nulos:{porcentagem_nao_nulos:.2f}/"
+            f"faixa:{porcentagem_dentro_faixa:.2f}/sem_repeticao:{porcentagem_sem_repeticao:.2f} "
+            f"Qualidade: {entry['Qualidade']:.2f}"
+        )
 
-        print(f"{entry['Estacao']} -> {entry['DataHora']} -> {porcentagem_validos}/{porcentagem_nao_nulos}/{porcentagem_dentro_faixa} Qualidade: {entry['Qualidade']:.2f}")
+        print(entry['Qualidade verbose'])
 
     return data_list
 
@@ -849,6 +873,8 @@ def add_conjugate_entry(data_list, conjugate_mapping):
     """
     for entry in data_list:
         station = entry.get('Estacao')
+        
+        # print(f'estacao:{station}')
         # Add the conjugate station if it exists in the mapping
         if station in conjugate_mapping:
             entry['Conjugada'] = conjugate_mapping[station]
@@ -1153,7 +1179,47 @@ def normalize(dados_por_data):
 
     return dados_por_data
 
-def recorte_evento(dados_por_data, tamanho_janela):
+def offset(data, mode='igrf', campo='H_nT'):
+    """
+    Ajusta os valores do campo de acordo com o modo selecionado.
+
+    Parâmetros:
+    - dados_por_data: lista de dicionários contendo os dados e metadados.
+    - mode: 'igrf' para ajuste com base no valor do IGRF, 
+            'first_value' para ajuste com base no primeiro valor válido do dataframe.
+    - campo: nome do campo a ser ajustado (padrão 'H_nT').
+
+    Retorna:
+    - lista com os dados ajustados.
+    """
+    dados_por_data = data 
+    for item in dados_por_data:
+        df_dados = item['Dados']
+        print(f"offset:{item['Estacao']}->{item['DataHora']}-> {item.get(f'igrf_{campo}', 'N/A')}")
+        
+        if mode == 'igrf':
+            # Offset pelo valor do IGRF
+            df_dados[campo] = df_dados[f"{campo}_source"] - item[f"igrf_{campo}"]
+        
+        elif mode == 'first_value':
+            # Offset pelo primeiro valor válido do campo
+            first_valid_idx = df_dados[campo].first_valid_index()
+            if first_valid_idx is not None:
+                first_valid_value = df_dados.loc[first_valid_idx, campo]
+                df_dados[campo] = df_dados[campo] - first_valid_value
+            else:
+                print(f"AVISO: Nenhum valor válido encontrado para '{campo}' em {item['Estacao']} na data {item['DataHora']}")
+        
+        else:
+            raise ValueError("Modo inválido! Escolha 'igrf' ou 'first_value'.")
+    
+    return dados_por_data
+
+
+
+def recorte_evento(dado, tamanho_janela):
+    
+    dados_por_data = dado
     for item in dados_por_data:
         df_dados = item['Dados']
         hora_central = item['Hora']
@@ -1171,10 +1237,7 @@ def recorte_evento(dados_por_data, tamanho_janela):
 
         # print(f"Filtered Data Length: {len(df_recortado)}")
 
-        if not df_recortado.empty:
-            # Correção para o primeiro valor da janela ser a referência "zero"
-            df_recortado['H_nT'] = df_recortado['H_nT'] - df_recortado['H_nT'].iloc[0]
-        else:
+        if df_recortado.empty:
             # Handle the empty DataFrame case
             print(f"No data available in the time window for Hora {hora_central}.")
         
@@ -1250,6 +1313,7 @@ def filtro_iir(df_dados, coluna):
 def time_to_decimal_24(time_str):
     time_obj = datetime.strptime(time_str, '%H:%M:%S.%f').time()
     decimal_time = time_obj.hour + time_obj.minute / 60 + time_obj.second / 3600 + time_obj.microsecond / 3600000000
+    decimal_time = round(decimal_time,2)
     return decimal_time
 
 def decimal_para_hora(decimal_hora):
@@ -1624,6 +1688,74 @@ def caract_latitude(station_name, stations_info):
   else:
       # Retorna uma mensagem de erro se a estação não for encontrada
       return "Estação não encontrada"
+  
+#%%filtragem pela qualidadade
+def filter_by_quality(my_list, estacoes_conjugadas, limite=0.9, field='Qualidade'):
+    """
+    Retorna uma lista filtrada de dados em 'my_list' com base em uma lista de estações conjugadas,
+    considerando apenas as datas em que todas as estações (principal e conjugada) têm o valor do campo especificado
+    maior que o limite e 'Amplificacao' no intervalo (> 0 e <= 5).
+
+    Parâmetros:
+        my_list (list): Lista de dicionários contendo dados das estações.
+        estacoes_conjugadas (dict): Dicionário com as estações principais como chaves e suas estações conjugadas como valores.
+        limite (float): Limite mínimo para o campo especificado (padrão: 0.9).
+        field (str): Nome do campo a ser verificado (padrão: 'Qualidade').
+
+    Retorna:
+        list: Lista filtrada com dados que atendem aos critérios de qualidade.
+    """
+    # Converte my_list em um dicionário para acesso mais rápido por estação e data
+    # my_list = eventos_sc
+    data_index = {}
+    for entry in my_list:
+        station = entry.get('Estacao')
+        datahora = entry.get('DataHora')
+        if station and datahora:
+            if datahora not in data_index:
+                data_index[datahora] = {}
+            data_index[datahora][station] = entry
+
+    # Filtra as datas que satisfazem as condições de qualidade e amplificação
+    filtered_data = []
+    for datahora, stations_data in data_index.items():
+        all_stations_meet_criteria = True
+        for principal, conjugada in estacoes_conjugadas.items():
+            principal_data = stations_data.get(principal)
+            conjugada_data = stations_data.get(conjugada)
+
+            if not principal_data:
+                all_stations_meet_criteria = False
+                # print(f"[{principal_data.get('Estacao', 'N/A')}] [{principal_data.get('DataHora', 'N/A')}]; dados da estação principal ausentes")
+                print(f"[{station}] [{datahora}] dados da estação principal ausentes")
+
+                break
+            
+            if principal_data.get(field, 0) < limite:
+                all_stations_meet_criteria = False
+                print(f"[{principal_data['Estacao']}] [{principal_data['DataHora']}] valor do campo '{field}' ({principal_data.get(field, 0)}) inadequado na estação principal")
+                break
+            
+            if not conjugada_data:
+                all_stations_meet_criteria = False
+                print(f"[{conjugada_data.get('Estacao', 'N/A')}] [{conjugada_data.get('DataHora', 'N/A')}] dados da estação conjugada ausentes")
+                break
+            
+            if conjugada_data.get(field, 0) < limite:
+                all_stations_meet_criteria = False
+                print(f"[{conjugada_data['Estacao']}] [{conjugada_data['DataHora']}] valor do campo '{field}' ({conjugada_data.get(field, 0)}) inadequado na estação conjugada")
+                break
+            
+            # if not (0 < principal_data.get('Amplificacao', -5) <= 5):
+            #     all_stations_meet_criteria = False
+            #     print(f"[{principal_data['Estacao']}] [{principal_data['DataHora']}] valor da amplificação ({principal_data.get('Amplificacao', -5)}) fora do intervalo permitido (0, 5]")
+            #     break
+
+        # Adiciona ao resultado final se a data satisfizer todas as condições para todas as estações
+        if all_stations_meet_criteria:
+            filtered_data.extend(stations_data.values())
+
+    return filtered_data
 
 
 
@@ -1865,7 +1997,8 @@ def load_data(file_path):
 
 # metadata2, data_list2 = load_data('selected_statios_just_events.pkl')
 #%% testes 2
-def derivativas2(dados_por_data, campo='H_nT', sinal = 'pc5'):
+def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
+    dados_por_data = data
     for item in dados_por_data:
         df_dados = item['Dados']
 
@@ -1894,8 +2027,6 @@ def derivativas2(dados_por_data, campo='H_nT', sinal = 'pc5'):
 
         # Calcula diferenças
         df_dados[f'd{campo}'] = df_dados[campo].diff()
-        # df_dados['dD_deg'] = df_dados['D_deg'].diff()
-        # df_dados['dZ_nT'] = df_dados['Z_nT'].diff()
 
         # Aplica média móvel
         df_dados[f'{campo}_movmean'] = df_dados[campo].rolling(window=20, center=True).mean()
@@ -1904,9 +2035,9 @@ def derivativas2(dados_por_data, campo='H_nT', sinal = 'pc5'):
         df_dados[f'd{campo}_movmean'] = df_dados[f'{campo}_movmean'].diff()
 
         # Aplica a função de ajuste e calcula parâmetros
-        if sinal == 'pc5':
+        if filtro == 'iir-pc5':
             ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_iir_amplitude(df_dados, campo, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2)
-        elif sinal == 'h':
+        elif filtro == 'wavelet':
             ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, campo)
         else:
             print(f"Tipo de sinal '{sinal}' não reconhecido. Use 'pc5' ou 'H'.")
@@ -1970,6 +2101,7 @@ def calculate_conjugate_difference2(data_list, campo='dH_nT'):
     for entry in data_list:
         station = entry.get('Estacao')
         datahora = entry.get('DataHora')
+        
         if station and datahora:
             if station not in data_index:
                 data_index[station] = {}
@@ -2096,7 +2228,7 @@ def amplificacao_E_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 
         eventos_com_amplificacao.append(evento_com_amplificacao)
     
     return eventos_com_amplificacao
-def caract_iir_amplitude(dados_janela, coluna, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2):
+def caract_iir_amplitude(data, coluna, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2):
     """
     Função para calcular a amplitude de um sinal filtrado usando filtro IIR bandpass.
 
@@ -2117,6 +2249,7 @@ def caract_iir_amplitude(dados_janela, coluna, low_cut=1.6e-3, high_cut=7e-3, fs
         - r_squared: Coeficiente de determinação.
         - rmse: Erro médio quadrático.
     """
+    dados_janela = data
     # Extrair dados da coluna específica e preencher NaNs com interpolação
     y_data = dados_janela[coluna].values
     y_data = pd.Series(y_data).interpolate().ffill().bfill().values
@@ -2176,77 +2309,46 @@ def caract_iir_amplitude(dados_janela, coluna, low_cut=1.6e-3, high_cut=7e-3, fs
 
 #%%teste 3
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import pywt
 
-def compute_wavelet_scalogram(data, sampling_interval, wavelet='cmor', frequencies=None, plot_scalogram=True):
+def espectro_frequencia(dados_por_data, campo='H_nT', amostragem=1, interpolacao=True):
     """
-    Compute the wavelet transform and scalogram using the Morlet wavelet.
-
-    Parameters:
-    - data: 1D array-like
-        Time series data to be transformed.
-    - sampling_interval: float
-        Time step between consecutive samples in the data (in seconds).
-    - wavelet: str, optional
-        Name of the wavelet to use (default: 'cmor').
-    - frequencies: array-like, optional
-        Frequencies of interest for the wavelet transform. If None, defaults to a logarithmic scale.
-    - plot_scalogram: bool, optional
-        Whether to plot the scalogram (default: True).
-
-    Returns:
-    - coeffs_squared: 2D numpy array
-        Squared wavelet coefficients (scalogram).
-    - frequencies: 1D numpy array
-        Frequencies corresponding to the rows of the scalogram.
-    - times: 1D numpy array
-        Time points corresponding to the columns of the scalogram.
-    """
-    # Validate data length
-    if len(data) <= 1:
-        raise ValueError("Data must have more than one sample.")
+    Calcula o espectro de frequência por transformada de Fourier para uma lista de dados de séries temporais.
     
-    # Calculate the sampling frequency
-    sampling_frequency = 1 / sampling_interval
+    Parâmetros:
+    - dados_por_data: lista de dicionários, onde cada dicionário contém um DataFrame associado à chave 'Dados'.
+    - campo: str, o nome da coluna no DataFrame que contém os dados da série temporal (default: 'H_nT').
+    - amostragem: float, intervalo de amostragem da série temporal em minutos (default: 1).
+    - interpolacao: bool, aplica interpolação para lidar com valores NaN na série temporal (default: True).
+    
+    Retorno:
+    - Retorna a lista com o espectro de frequência adicionado a cada item.
+    """
+    for item in dados_por_data:
+        df_dados = item['Dados']
+        
+        # Obter a série temporal do campo especificado
+        if interpolacao:
+            serie_temporal = df_dados[campo].interpolate(method='linear', limit_direction='both').values
+        else:
+            serie_temporal = df_dados[campo].values
+        
+        # Aplicar a transformada de Fourier
+        fft_result = np.fft.fft(serie_temporal)
+        frequencias = np.fft.fftfreq(len(serie_temporal), d=amostragem)
+        
+        # Apenas as frequências positivas
+        frequencias_positivas = frequencias[:len(frequencias)//2]
+        amplitudes = np.abs(fft_result)[:len(fft_result)//2]
+        
+        # Adicionar os resultados ao item com escala logarítmica
+        item[f'EspectroFFT_{campo}'] = pd.DataFrame({
+            'Frequencia (mHz)': frequencias_positivas * 1000,  # Conversão para mHz
+            'Amplitude': amplitudes,
+            'Log10(Amplitude)': np.log10(amplitudes + 1e-10)  # Adiciona pequena constante para evitar log(0)
+        })
+    
+    return dados_por_data
 
-    # Determine the default frequencies if not provided
-    if frequencies is None:
-        frequencies = np.logspace(np.log10(1), np.log10(sampling_frequency / 2), num=50)
-
-    # Compute scales based on frequencies
-    scales = pywt.scale2frequency(wavelet, [1]) / frequencies
-    scales = scales.flatten()
-
-    # Compute wavelet transform
-    coeffs, freqs = pywt.cwt(data, scales, wavelet, sampling_period=sampling_interval)
-
-    # Compute squared coefficients (scalogram)
-    coeffs_squared = np.abs(coeffs) ** 2
-
-    # Generate time points
-    times = np.arange(len(data)) * sampling_interval
-
-    # Plot the scalogram if requested
-    if plot_scalogram:
-        plt.figure(figsize=(10, 6))
-        plt.contourf(times, frequencies, coeffs_squared, extend='both', cmap='viridis')
-        plt.colorbar(label='Power')
-        plt.yscale('log')
-        plt.ylabel('Frequency (Hz)')
-        plt.xlabel('Time (s)')
-        plt.title('Wavelet Scalogram')
-        plt.show()
-
-    return coeffs_squared, frequencies, times
-
-# Example usage
-if __name__ == "__main__":
-    # Example signal: sinusoidal + noise
-    sampling_interval = 0.01  # 100 Hz sampling rate
-    t = np.arange(0, 10, sampling_interval)
-    signal = np.sin(2 * np.pi * 5 * t) + np.sin(2 * np.pi * 20 * t) + 0.5 * np.random.randn(len(t))
-
-    # Compute the scalogram
-    scalogram, freqs, times = compute_wavelet_scalogram(signal, sampling_interval)
 

@@ -27,11 +27,6 @@ from matplotlib.cm import get_cmap
 from matplotlib.patches import Rectangle
 import datetime as dt
 
-# event_dates = pd.DataFrame({
-#     'Data': ['2015-11-03'],
-#     'Hora': [7.5]
-# })
-
 # Fechar todos os gráficos abertos ao iniciar o script
 plt.close('all')
 
@@ -50,305 +45,6 @@ def load_data(file_path):
         data_list = pickle.load(file)
     
     return metadata, data_list   
-
-# #%% Função para Calcular Diferença com Estação Conjugada
-# def calculate_conjugate_difference(data_list):
-#     """
-#     Calcula a diferença nos valores de "dH_nT" entre cada estação e sua estação conjugada
-#     para cada "DataHora" disponível.
-
-#     Parâmetros:
-#         data_list (list): Lista de dicionários contendo dados das estações.
-
-#     Retorna:
-#         list: Lista atualizada com a diferença adicionada como uma nova coluna "dH_nT_diff" no DataFrame "Dados".
-#     """
-#     # Cria um dicionário para indexar dados por estação e DataHora para fácil consulta
-#     data_index = {}
-#     for entry in data_list:
-#         station = entry.get('Estacao')
-#         datahora = entry.get('DataHora')
-#         if station and datahora:
-#             if station not in data_index:
-#                 data_index[station] = {}
-#             data_index[station][datahora] = entry
-    
-#     # Calcula a diferença em dH_nT entre cada estação e sua conjugada
-#     for entry in data_list:
-#         conjugate_station = entry.get('Conjugada')
-#         datahora = entry.get('DataHora')
-#         if conjugate_station and datahora:
-#             conjugate_entry = data_index.get(conjugate_station, {}).get(datahora)
-#             if conjugate_entry:
-#                 entry['Dados']['dH_nT_diff'] = entry['Dados']['dH_nT'] - conjugate_entry['Dados']['dH_nT']
-#             else:
-#                 entry['Dados']['dH_nT_diff'] = None  # Definir como None se os dados da conjugada não estiverem disponíveis
-#         else:
-#             entry['Dados']['dH_nT_diff'] = None  # Definir como None se não houver estação conjugada
-    
-#     return data_list
-
-
-
-#%%filtragem pela qualidadade
-def filter_by_quality(my_list, estacoes_conjugadas, limite=0.9, field='Qualidade'):
-    """
-    Retorna uma lista filtrada de dados em 'my_list' com base em uma lista de estações conjugadas,
-    considerando apenas as datas em que todas as estações (principal e conjugada) têm o valor do campo especificado
-    maior que o limite e 'Amplificacao' no intervalo (> 0 e <= 5).
-
-    Parâmetros:
-        my_list (list): Lista de dicionários contendo dados das estações.
-        estacoes_conjugadas (dict): Dicionário com as estações principais como chaves e suas estações conjugadas como valores.
-        limite (float): Limite mínimo para o campo especificado (padrão: 0.9).
-        field (str): Nome do campo a ser verificado (padrão: 'Qualidade').
-
-    Retorna:
-        list: Lista filtrada com dados que atendem aos critérios de qualidade.
-    """
-    # Converte my_list em um dicionário para acesso mais rápido por estação e data
-    data_index = {}
-    for entry in my_list:
-        station = entry.get('Estacao')
-        datahora = entry.get('DataHora')
-        if station and datahora:
-            if datahora not in data_index:
-                data_index[datahora] = {}
-            data_index[datahora][station] = entry
-
-    # Filtra as datas que satisfazem as condições de qualidade e amplificação
-    filtered_data = []
-    for datahora, stations_data in data_index.items():
-        all_stations_meet_criteria = True
-        for principal, conjugada in estacoes_conjugadas.items():
-            principal_data = stations_data.get(principal)
-            conjugada_data = stations_data.get(conjugada)
-
-            # Verifica critérios do campo especificado e 'Amplificacao' para ambas as estações
-            if (not principal_data or principal_data.get(field, 0) <= limite or
-                not conjugada_data or conjugada_data.get(field, 0) <= limite or
-                not (0 < principal_data.get('Amplificacao', -5) <= 5)):
-                all_stations_meet_criteria = False
-                break
-
-        # Adiciona ao resultado final se a data satisfizer todas as condições para todas as estações
-        if all_stations_meet_criteria:
-            filtered_data.extend(stations_data.values())
-
-    return filtered_data
-
-
-#%% parametro por tempo
-# def plot_amplification_for_stations(my_list, stations, field):
-#     """
-#     Plota o campo especificado ao longo do tempo como pontos para as estações especificadas
-#     e adiciona uma linha da média e desvio padrão para cada estação, usando a mesma cor dos pontos.
-#     Destaca pontos que estejam na noite, baseado na longitude da estação.
-#     Exibe no título a quantidade total de dados plotados.
-
-#     Parâmetros:
-#         my_list (list): Lista de dicionários contendo dados das estações.
-#         stations (list): Lista de estações a serem plotadas.
-#         field (str): Campo a ser plotado (e.g., 'Amplificacao').
-#     """
-
-#     plt.figure(figsize=(12, 8))
-
-#     # Define a paleta de cores 'viridis', adequada para daltônicos
-#     colors = cm.get_cmap("viridis", len(stations))
-
-#     # Variável para contar o total de dados plotados
-#     total_data_points = 0
-
-#     # Itera sobre cada estação na lista especificada para plotar o campo especificado ao longo do tempo
-#     for idx, station in enumerate(stations):
-#         # Filtra dados para a estação atual
-#         station_data = [entry for entry in my_list if entry['Estacao'] == station]
-        
-#         # Obtém os valores de tempo e do campo especificado
-#         times = [entry['DataHora'] for entry in station_data]
-#         # times = [time.strftime("%H:%M %d/%m/%Y") for time in times]  # Formata a data para HH MM DD MM AAAA
-#         values = [entry[field] for entry in station_data]
-#         longitudes = [entry['Longitude'] for entry in station_data]
-#         local_times = [entry['TempoLocal'] for entry in station_data]
-
-#         # Incrementa o contador de pontos de dados
-#         total_data_points += len(values)
-
-#         # Escolhe a cor específica para a estação
-#         color = colors(idx)
-
-#         # Plota todos os dados do campo especificado ao longo do tempo como pontos para a estação
-#         plt.scatter(times, values, label=station, alpha=1, color=color)
-
-#         # Calcula e plota a linha da média e desvio padrão para a estação
-#         if values:  # Verifica se há dados
-#             mean_value = np.nanmean(values)
-#             std_value = np.nanstd(values)
-#             plt.axhline(y=mean_value, color=color, linestyle='--', linewidth=1, alpha=0.7,
-#                         label=f"{station} Média = {mean_value:.2f}, Desvio Padrão = {std_value:.2f}")
-
-#     # Configurações do gráfico
-#     plt.xlabel('Tempo')
-#     plt.ylabel(field)
-#     plt.title(f'{field} ao longo do tempo com linha da média e desvio padrão\nTotal de pontos de dados: {total_data_points}')
-#     plt.xticks(rotation=90, fontsize=8)
-#     plt.legend()
-#     plt.grid(True)
-#     plt.tight_layout()
-#     plt.show()
-
-#%% plotar detalhes evento 
-# def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, colunas_eixo_direito, stations, salvar_pdf=False, datafile_name='Teste', parametros=[], view_points = True):
-#     """
-#     Plota os campos especificados para múltiplos eventos e múltiplas estações dentro de um intervalo de datas.
-
-#     Parâmetros:
-#         data_list (pd.DataFrame): DataFrame contendo dados das estações.
-#         intervalo (list): Lista com duas strings especificando a data de início e fim (formato: 'DD/MM/YYYY').
-#         colunas_eixo_esquerdo (list of tuples): Campos para plotar em cada painel no eixo y à esquerda (ex.: [('H_nT', 'Principal'), ('H_nT', 'Conjugada')]).
-#         colunas_eixo_direito (list of tuples): Campos para plotar em cada painel no eixo y à direita (ex.: [('dH_nT_diff', 'Principal')]).
-#         stations (list of str): Lista de estações principais a serem analisadas.
-#         event_dates (pd.DataFrame): DataFrame com duas colunas, 'Data' (tipo datetime) e 'hora' (str, formato 'HH:MM').
-#         salvar_pdf (bool): Se True, salva os gráficos em um PDF. Padrão é False.
-#         parametros (list of tuples): Lista de parâmetros a serem exibidos em cada gráfico (ex.: [('Amplitude', 'Principal')]).
-#     """
-#     start_date = datetime.strptime(intervalo[0], '%d/%m/%Y')
-#     end_date = datetime.strptime(intervalo[1], '%d/%m/%Y')
-#     # data_list = my_list
-#     # Filtra os dados dentro do intervalo especificado
-#     filtered_data = [entry for entry in data_list if start_date <= entry.get('DataHora') <= end_date]
-
-#     # Filtra os dados para apenas as datas e horas explicitadas em event_dates
-#     valid_dates = []
-#     for _, row in event_dates.iterrows():
-#         data = row['Data']
-#         hora_decimal = row['Hora']
-#         horas = int(row['Hora'])
-#         minutos = int((hora_decimal - horas) * 60)
-#         delta_tempo = pd.to_timedelta(f'{horas}h {minutos}m')
-#         # Criar um timestamp com data e hora
-#         data_hora = data + delta_tempo
-#         valid_dates.append(data_hora)
-    
-#     # print(valid_dates)
-#     filtered_data = [entry for entry in filtered_data if entry.get('DataHora') in valid_dates]
-
-#     if not filtered_data:
-#         print(f"Nenhum dado disponível no intervalo especificado: {intervalo[0]} a {intervalo[1]}.")
-#         return
-
-#     events = sorted(set([entry['DataHora'] for entry in filtered_data]))
-#     num_events = len(events)
-#     num_stations = len(stations)
-#     eventos_por_pagina = 2
-
-#     # Cria um PDF para salvar os gráficos se salvar_pdf for True
-#     if salvar_pdf:
-#         pdf = PdfPages(datafile_name + '.pdf')
-
-#     # Divide os eventos em páginas com no máximo 6 eventos por página
-#     for page_start in range(0, num_events, eventos_por_pagina):
-#         page_events = events[page_start:page_start + eventos_por_pagina]
-#         fig, axes = plt.subplots(num_stations, len(page_events), figsize=(5 * len(page_events), 5 * num_stations), sharex=False)
-
-#         if num_stations == 1:
-#             axes = [axes]
-#         if len(page_events) == 1:
-#             axes = [[ax] for ax in axes]
-
-#         # Plota os dados para cada estação e evento
-#         for i, station in enumerate(stations):
-#             for j, event in enumerate(page_events):
-#                 ax = axes[i][j]
-#                 main_data = next((entry for entry in filtered_data if entry.get('Estacao') == station and entry.get('DataHora') == event), None)
-#                 conjugate_data = None
-#                 if main_data and main_data.get('Conjugada'):
-#                     conjugate_data = next((e for e in filtered_data if e.get('Estacao') == main_data['Conjugada'] and e.get('DataHora') == event), None)
-
-#                 if not main_data:
-#                     ax.set_title(f"Nenhum dado disponível ({event.strftime('%d/%m/%Y')}")
-#                     continue
-
-#                 # Plota as colunas especificadas para a estação atual e evento no eixo y à direita
-#                 if colunas_eixo_direito:
-#                     ax_right = ax.twinx()
-#                     for field_right, station_type in colunas_eixo_direito:
-#                         if station_type == 'Principal':
-#                             time_series = main_data['Dados']['TIME']
-#                             ax_right.plot(time_series, main_data['Dados'][field_right], linestyle='-', color='green', alpha=0.5, label=f"{colunas_eixo_direito[0]}")
-
-#                         elif station_type == 'Conjugada' and conjugate_data:
-#                             time_series = conjugate_data['Dados']['TIME']
-#                             ax_right.plot(time_series, conjugate_data['Dados'][field_right], linestyle='-', color='orange', alpha=0.5, label=f"{colunas_eixo_direito[1]}")
-
-#                 # Plota as colunas especificadas para a estação atual e evento no eixo y à esquerda
-#                 for field, station_type in colunas_eixo_esquerdo:
-#                     if station_type == 'Principal':
-#                         time_series = main_data['Dados']['TIME']
-#                         ax.plot(time_series, main_data['Dados'][field], linestyle='-', color='green', label=f"{colunas_eixo_esquerdo[0]}")
-#                         if not ((np.isnan(main_data['Ponto_Esquerda']).any() or np.isnan(main_data['Ponto_Direita']).any())) and view_points :
-#                             ax_right.scatter(main_data['Ponto_Esquerda'][0], main_data['Ponto_Esquerda'][1], color='red')
-#                             ax_right.scatter(main_data['Ponto_Direita'][0], main_data['Ponto_Direita'][1], color='red')
-#                     elif station_type == 'Conjugada' and conjugate_data:
-#                         time_series = conjugate_data['Dados']['TIME']
-#                         ax.plot(time_series, conjugate_data['Dados'][field], linestyle='-', color='orange', label=f"{colunas_eixo_esquerdo[1]}")
-#                         if not ((np.isnan(conjugate_data['Ponto_Esquerda']).any() or np.isnan(conjugate_data['Ponto_Direita']).any())) and view_points:
-#                             ax_right.scatter(conjugate_data['Ponto_Esquerda'][0], conjugate_data['Ponto_Esquerda'][1], color='red')
-#                             ax_right.scatter(conjugate_data['Ponto_Direita'][0], conjugate_data['Ponto_Direita'][1], color='red')
-
-#                 # Adiciona os parâmetros especificados em uma caixa de texto no gráfico
-#                 parametros_texto = ""
-#                 for parametro, station_type in parametros:
-#                     if station_type == 'Principal' and parametro in main_data:
-#                         parametros_texto += f"{parametro}_P: {main_data[parametro]:.2f}\n"
-#                     elif station_type == 'Conjugada' and conjugate_data and parametro in conjugate_data:
-#                         parametros_texto += f"{parametro}_C: {conjugate_data[parametro]:.2f}\n"
-
-#                 if parametros_texto:
-#                     bbox_props = dict(boxstyle='round', facecolor='white', alpha=0.5, edgecolor='black')
-#                     ax.text(0.05, 0.95, parametros_texto, transform=ax.transAxes, fontsize=10,
-#                             verticalalignment='top', bbox=bbox_props)
-
-#                 # Adiciona o título com a parte exponencial nos eixos
-#                 if i == 0 and j == 0:
-#                     ax.set_xlabel("TIME")
-#                     ax.set_ylabel(f"{field}")
-#                     if colunas_eixo_direito:
-#                         ax_right.set_ylabel(f"{field_right}")
-
-#                 if i == 0:
-#                     ax.set_title(f"#{j + page_start} {event.strftime('%d/%m/%Y')} \n P:{station}/C:{main_data.get('Conjugada')}", fontweight='bold')
-#                 else:
-#                     ax.set_title(f"P:{station}/C:{main_data.get('Conjugada')}", fontweight='bold')
-
-#                 time_data = main_data['Dados']['TIME']
-
-#                 # Verificar se há valores NaN ou infinitos
-#                 if time_data.isna().any() or np.isinf(time_data).any():
-#                     continue
-#                 # Definir os limites do eixo x
-#                 ax.set_xlim(time_data.iloc[0], time_data.iloc[-1])
-#                 ax_right
-#                 ax.grid(True)
-
-#         # Adiciona uma única legenda para todos os subplots
-#         handles_left, labels_left = ax.get_legend_handles_labels()
-#         handles_right, labels_right = ax_right.get_legend_handles_labels() if colunas_eixo_direito else ([], [])
-#         handles_combined = handles_left + handles_right
-#         labels_combined = labels_left + labels_right
-#         fig.legend(handles_combined, labels_combined, loc='upper right')
-
-#         mplcursors.cursor(hover=True)
-#         plt.tight_layout()
-
-#         if salvar_pdf:
-#             pdf.savefig(fig)
-#         plt.show()
-
-#     # Fecha o PDF se ele foi criado
-#     if salvar_pdf:
-#         pdf.close()
 
 #%% plotar amplificação por estação 
 def plot_bar_chart_for_stations(my_list, stations, field):
@@ -471,8 +167,6 @@ def plot_scatter_for_stations(data_list, stations, field):
     # Show the chart
     plt.tight_layout()
     plt.show()
-
-
 
 #%% busca anomalos 
 def buscar_anomalos(my_list, stations, field, condition):
@@ -677,56 +371,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     if all(math.isfinite(limit) for limit in y_right_limits[j]):
                         ax_right.set_ylim(y_right_limits[j])
                         # print(f'direito = {y_right_limits}')
-
-                # Plota as colunas especificadas para a estação atual e evento no eixo y à esquerda
-                # for field, station_type in colunas_eixo_esquerdo:
-                #     if station_type == 'Principal':
-                #         time_series = main_data['Dados']['TIME']
-                #         ax.plot(time_series, main_data['Dados'][field], linestyle='-', color='black', alpha=0.5, label=f"{field} Principal")
-                #         if view_points and 'Ponto_Esquerda' in main_data and 'Ponto_Direita' in main_data:
-                #             if not (np.isnan(main_data['Ponto_Esquerda']).any() or np.isnan(main_data['Ponto_Direita']).any()):
-                #                 ax_right.scatter(main_data['Ponto_Esquerda'][0], main_data['Ponto_Esquerda'][1], color='red')
-                #                 ax_right.scatter(main_data['Ponto_Direita'][0], main_data['Ponto_Direita'][1], color='red')
-                #     elif station_type == 'Conjugada' and conjugate_data:
-                #         time_series = conjugate_data['Dados']['TIME']
-                #         ax.plot(time_series, conjugate_data['Dados'][field], linestyle='-', color='black', alpha=0.5, label=f"{field} Conjugada")
-                #         if view_points and 'Ponto_Esquerda' in conjugate_data and 'Ponto_Direita' in conjugate_data:
-                #             if not (np.isnan(conjugate_data['Ponto_Esquerda']).any() or np.isnan(conjugate_data['Ponto_Direita']).any()):
-                #                 ax_right.scatter(conjugate_data['Ponto_Esquerda'][0], conjugate_data['Ponto_Esquerda'][1], color='red')
-                #                 ax_right.scatter(conjugate_data['Ponto_Direita'][0], conjugate_data['Ponto_Direita'][1], color='red')
-                # Plota as colunas especificadas para a estação atual e evento no eixo y à esquerda
-                # for field, station_type in colunas_eixo_esquerdo:
-                    
-                #     if station_type == 'Principal':
-                #         time_series = main_data['Dados']['TIME']
-                #         ax.plot(time_series, main_data['Dados'][field], linestyle='-', color='black', alpha=0.5, label=f"{field} Principal")
-                        
-                #         # Determina as chaves de ponto dependendo do valor de 'field'
-                #         ponto_esquerda_key = 'Ponto_Esquerda_D' if field == 'dH_nT_abs' else 'Ponto_Esquerda_D' if field == 'dH_nT_absacumulado' else 'Ponto_Esquerda'
-
-                #         ponto_direita_key = 'Ponto_Direita_D' if field == 'dH_nT_abs' else 'Ponto_Direita'
-                        
-                        
-                        
-                        
-                #         if view_points and ponto_esquerda_key in main_data and ponto_direita_key in main_data:
-                #             if not (np.isnan(main_data[ponto_esquerda_key]).any() or np.isnan(main_data[ponto_direita_key]).any()):
-                #                 ax_right.scatter(main_data[ponto_esquerda_key][0], main_data[ponto_esquerda_key][1], color='red')
-                #                 ax_right.scatter(main_data[ponto_direita_key][0], main_data[ponto_direita_key][1], color='red')
-                                
-                #     elif station_type == 'Conjugada' and conjugate_data:
-                #         time_series = conjugate_data['Dados']['TIME']
-                #         ax.plot(time_series, conjugate_data['Dados'][field], linestyle='-', color='black', alpha=0.5, label=f"{field} Conjugada")
-                        
-                #         # Determina as chaves de ponto dependendo do valor de 'field'
-                #         ponto_esquerda_key = 'Ponto_Esquerda_D' if field == 'dH_nT_abs' else 'Ponto_Esquerda'
-                #         ponto_direita_key = 'Ponto_Direita_D' if field == 'dH_nT_abs' else 'Ponto_Direita'
-                        
-                #         if view_points and ponto_esquerda_key in conjugate_data and ponto_direita_key in conjugate_data:
-                #             if not (np.isnan(conjugate_data[ponto_esquerda_key]).any() or np.isnan(conjugate_data[ponto_direita_key]).any()):
-                #                 ax_right.scatter(conjugate_data[ponto_esquerda_key][0], conjugate_data[ponto_esquerda_key][1], color='red')
-                #                 ax_right.scatter(conjugate_data[ponto_direita_key][0], conjugate_data[ponto_direita_key][1], color='red')
-                # Dicionário para mapear valores de 'field' para sufixos
+       
                 sufixo_mapeamento = {
                     'dH_nT_abs': 'D',
                     'dH_nT_absacumulado': 'E',
@@ -804,14 +449,6 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     handles_combined = handles_left + handles_right
                     labels_combined = labels_left + labels_right
                     ax.legend(handles_combined, labels_combined, loc='upper right',fontsize=6)
-
-
-        # Remove a legenda em nível de figura
-        # handles_left, labels_left = ax.get_legend_handles_labels()
-        # handles_right, labels_right = ax_right.get_legend_handles_labels() if colunas_eixo_direito else ([], [])
-        # handles_combined = handles_left + handles_right
-        # labels_combined = labels_left + labels_right
-        # fig.legend(handles_combined, labels_combined, loc='upper right')
 
         mplcursors.cursor(hover=True)
         plt.tight_layout()
@@ -956,72 +593,6 @@ def plot_scatter_for_stations(data_list, stations, field, save_path=None,titulo 
         plt.savefig(save_path)
     plt.show()
 
-# def plot_amplification_for_stations(my_list, stations, field, save_path=None,titulo = "Sem Titulo"):
-#     """
-#     Plota o campo especificado ao longo do tempo como pontos para as estações especificadas
-#     e adiciona uma linha da média e desvio padrão para cada estação, usando a mesma cor dos pontos.
-#     Destaca pontos que estejam na noite, baseado na longitude da estação.
-#     Exibe no título a quantidade total de dados plotados.
-
-#     Parâmetros:
-#         my_list (list): Lista de dicionários contendo dados das estações.
-#         stations (list): Lista de estações a serem plotadas.
-#         field (str): Campo a ser plotado (e.g., 'Amplificacao').
-#         save_path (str, opcional): Caminho para salvar a figura. Se None, a figura não será salva.
-#     """
-#     import matplotlib.pyplot as plt
-#     import matplotlib.cm as cm
-#     import numpy as np
-
-#     plt.figure(figsize=(16, 8))
-
-#     # Define a paleta de cores 'viridis', adequada para daltônicos
-#     colors = cm.get_cmap("Accent", len(stations))
-
-#     # Variável para contar o total de dados plotados
-#     total_data_points = 0
-
-#     # Itera sobre cada estação na lista especificada para plotar o campo especificado ao longo do tempo
-#     for idx, station in enumerate(stations):
-#         # Filtra dados para a estação atual
-#         station_data = [entry for entry in my_list if entry['Estacao'] == station]
-        
-#         # Obtém os valores de tempo e do campo especificado
-#         times = [entry['DataHora'] for entry in station_data]
-#         values = [entry[field] for entry in station_data]
-#         longitudes = [entry['Longitude'] for entry in station_data]
-#         local_times = [entry['TempoLocal'] for entry in station_data]
-
-#         # Incrementa o contador de pontos de dados
-#         total_data_points += len(values)
-
-#         # Escolhe a cor específica para a estação
-#         color = colors(idx)
-
-#         # Plota todos os dados do campo especificado ao longo do tempo como pontos para a estação
-#         # plt.scatter(times, values, label=station, alpha=1, color=color)
-#         plt.scatter(times, values, alpha=1, color=color)
-
-#         # Calcula e plota a linha da média e desvio padrão para a estação
-#         if values:  # Verifica se há dados
-#             mean_value = np.nanmean(values)
-#             std_value = np.nanstd(values)
-#             plt.axhline(y=mean_value, color=color, linestyle='-', linewidth=1, alpha=0.7,
-#                         label=f"{station} Média = {mean_value:.2f}, Desvio Padrão = {std_value:.2f}")
-
-#     # Configurações do gráfico
-#     plt.xlabel('Tempo', fontsize=14)
-#     plt.ylabel(field, fontsize=14)
-#     plt.title(titulo + f'\n Total de amostras: {total_data_points}', fontsize=14)
-#     plt.xticks(rotation=90, fontsize=14)
-#     plt.legend()
-#     plt.grid(True)
-#     plt.tight_layout()
-
-#     # Salva ou mostra o gráfico
-#     if save_path:
-#         plt.savefig(save_path)
-#     plt.show()
 # %%teste2
 def plot_amplification_for_stations(my_list, stations, field, save_path=None, titulo="Sem Titulo"):
     """
@@ -1199,78 +770,6 @@ def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo=
         plt.savefig(save_path)
     plt.show()
 
-# #%% teste 4 tempo local
-# import matplotlib.pyplot as plt
-# import matplotlib.dates as mdates
-# import matplotlib.cm as cm
-# import numpy as np
-
-# def plot_field_by_local_time(my_list, stations, field, save_path=None, titulo="Sem Titulo"):
-#     """
-#     Plota o campo especificado ao longo do tempo local como pontos para as estações especificadas,
-#     adicionando uma linha da média e desvio padrão para cada estação em gráficos separados.
-
-#     Parâmetros:
-#         my_list (list): Lista de dicionários contendo dados das estações.
-#         stations (list): Lista de estações a serem plotadas.
-#         field (str): Campo a ser plotado (e.g., 'Amplificacao').
-#         save_path (str, opcional): Caminho para salvar a figura. Se None, a figura não será salva.
-#         titulo (str, opcional): Título geral do gráfico.
-#     """
-#     # Define a paleta de cores adequada
-#     colors = cm.get_cmap("Accent", len(stations))
-
-#     # Cria os subplots
-#     fig, axes = plt.subplots(len(stations), 1, figsize=(16, 6 * len(stations)), sharex=True)
-
-#     # Certifique-se de lidar com o caso de uma única estação
-#     if len(stations) == 1:
-#         axes = [axes]
-
-#     for idx, station in enumerate(stations):
-#         # Filtra os dados da estação
-#         station_data = [entry for entry in my_list if entry['Estacao'] == station]
-#         conjugada = station_data[0]['Conjugada'] if station_data else "N/A"
-
-#         # Obtém os valores de TempoLocal e do campo especificado
-#         times = [entry['TempoLocal'].hour + entry['TempoLocal'].minute / 60 for entry in station_data]
-#         values = [entry[field] for entry in station_data]
-
-#         # Verifica se há dados
-#         if not times or not values:
-#             continue
-
-#         # Seleciona o subplot correto
-#         ax = axes[idx]
-
-#         # Plota os pontos
-#         ax.scatter(times, values, alpha=0.7, color=colors(idx), label=station)
-
-#         # Calcula e plota a linha da média e desvio padrão
-#         mean_value = np.nanmean(values)
-#         std_value = np.nanstd(values)
-#         ax.axhline(y=mean_value, color=colors(idx), linestyle='-', linewidth=1, alpha=0.7,
-#                    label=f"Média = {mean_value:.2f}, Desvio Padrão = {std_value:.2f}")
-
-#         # Configurações do subplot
-#         ax.set_ylabel(field, fontsize=14)
-#         ax.set_title(f"{station}/{conjugada}  Total pontos: {len(values)}", fontsize=16)
-#         ax.legend(fontsize=12)
-#         ax.grid(True)
-
-                   
-#         # ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-#     # Configurações gerais
-#     plt.xlabel('Hora Local', fontsize=14)
-#     plt.suptitle(titulo, fontsize=18)
-#     plt.xticks(rotation=45, fontsize=12)
-#     plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-#     # Salva ou exibe o gráfico
-#     if save_path:
-#         plt.savefig(save_path)
-#     plt.show()
 def plot_field_by_local_time(my_list, stations, field, save_path=None, titulo="Sem Titulo"):
     """
     Plota o campo especificado ao longo do tempo local como pontos para as estações especificadas,
@@ -1561,3 +1060,92 @@ def plot_amplificacao_and_solar_flux(eventos_sc_local, filtered_data, intervalo,
     if save_path:
         plt.savefig(save_path)
     plt.show()
+#%%
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
+def plot_espectros_frequencia(data_list, stations, campo='Amplitude', salvar_pdf=False, nome_pdf='espectros_frequencia.pdf'):
+    """
+    Plota os espectros de frequência por dia, agrupando gráficos por dia e exibindo dados da estação principal e conjugada juntos.
+
+    Parâmetros:
+    - data_list (list of dicts): Lista contendo dados das estações, com espectros calculados.
+    - stations (list of str): Lista de estações principais a serem analisadas.
+    - campo_espectro (str): Nome do campo que contém o espectro de frequência nos dados (default: 'Espectro_H_nT').
+    - salvar_pdf (bool): Se True, salva os gráficos em um PDF. Padrão é False.
+    - nome_pdf (str): Nome do arquivo PDF a ser salvo. Padrão é 'espectros_frequencia.pdf'.
+    """
+    # Cria o PDF se necessário
+    if salvar_pdf:
+        pdf = PdfPages(nome_pdf)
+
+    # Obtem todos os dias únicos
+    dias = sorted(set(entry.get('DataHora').date() for entry in data_list if entry.get('DataHora')))
+    
+    # Loop pelos dias
+    for dia in dias:
+        # Filtra os dados para o dia atual
+        dados_do_dia = [entry for entry in data_list if entry.get('DataHora').date() == dia]
+
+        # Cria a figura para o dia
+        num_stations = len(stations)
+        fig, axes = plt.subplots(num_stations, 1, figsize=(8, 4 * num_stations), sharex=True)
+
+        if num_stations == 1:
+            axes = [axes]
+
+        for i, station in enumerate(stations):
+            ax = axes[i]
+
+            # Filtra os dados da estação principal e conjugada
+            dados_principal = next((entry for entry in dados_do_dia if entry.get('Estacao') == station), None)
+            conjugada = dados_principal.get('Conjugada') if dados_principal else None
+            dados_conjugada = next((entry for entry in dados_do_dia if entry.get('Estacao') == conjugada), None) if conjugada else None
+
+            # Plota os dados da estação principal
+            if dados_principal and 'EspectroFFT_H_nT' in dados_principal:
+                espectro_principal = dados_principal['EspectroFFT_H_nT']
+                ax.plot(espectro_principal['Frequencia (mHz)'], espectro_principal[campo], label=f"{station} Principal", color='blue')
+
+            # Plota os dados da conjugada
+            if dados_conjugada and 'EspectroFFT_H_nT' in dados_conjugada:
+                espectro_conjugada = dados_conjugada['EspectroFFT_H_nT']
+                ax.plot(espectro_conjugada['Frequencia (mHz)'], espectro_conjugada[campo], label=f"{conjugada} Conjugada", color='orange')
+
+            # Configurações do gráfico
+            ax.set_title(f"Espectro de Frequência - {station} (Principal) e {conjugada} (Conjugada)", fontsize=10, fontweight='bold')
+            ax.set_xlabel("Frequencia (mHz)", fontsize=8)
+            ax.set_ylabel(f"{campo}", fontsize=8)
+            ax.grid(True)
+            ax.legend(fontsize=7)
+            ax.tick_params(axis='both', which='major', labelsize=8)
+            ax.set_xlim(0, 100)  # Define o limite de frequência de 0 a 100 mHz
+
+
+            # Adiciona parâmetros como anotações
+            parametros_texto = ""
+            if dados_principal:
+                parametros_texto += f"Qualidade_P: {dados_principal.get('Qualidade_P', 'N/A')}\n"
+                parametros_texto += f"Amplificação_P: {dados_principal.get('Amplificacao_P', 'N/A')}\n"
+            if dados_conjugada:
+                parametros_texto += f"Qualidade_C: {dados_conjugada.get('Qualidade_P', 'N/A')}\n"
+                parametros_texto += f"Amplificação_C: {dados_conjugada.get('Amplificacao_P', 'N/A')}\n"
+            bbox_props = dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='black')
+            ax.text(0.05, 0.95, parametros_texto, transform=ax.transAxes, fontsize=8, verticalalignment='top', bbox=bbox_props)
+
+        # Ajusta o layout
+        plt.suptitle(f"Espectros de Frequência - Dia {dia.strftime('%d/%m/%Y')}", fontsize=12, fontweight='bold')
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+        # Salva no PDF ou exibe o gráfico
+        if salvar_pdf:
+            pdf.savefig(fig)
+        plt.show()
+
+    # Fecha o PDF se foi criado
+    if salvar_pdf:
+        pdf.close()
+
+
+
+
