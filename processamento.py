@@ -883,7 +883,9 @@ def add_conjugate_entry(data_list, conjugate_mapping):
     
     return data_list
 
-def calcular_tempo_local(eventos_sc):
+def calcular_tempo_local(data):
+    
+    eventos_sc = data
     df = pd.DataFrame(eventos_sc)
     
     # Verifique se o DataFrame contém as colunas necessárias
@@ -905,11 +907,11 @@ def calcular_tempo_local(eventos_sc):
     
     return eventos_sc_local
 
-def amplificacao_estacoes(eventos_sc, estacoes_conjugadas):
+def amplificacao_estacoes(data, estacoes_conjugadas):
 
     #opção para calcular amplificação para cada estação conjugada
     # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
-
+    eventos_sc = data
     eventos_com_amplificacao = []
     
     # Crie um dicionário para armazenar amplitudes por DataHora e Estação
@@ -1690,14 +1692,14 @@ def caract_latitude(station_name, stations_info):
       return "Estação não encontrada"
   
 #%%filtragem pela qualidadade
-def filter_by_quality(my_list, estacoes_conjugadas, limite=0.9, field='Qualidade'):
+def filter_by_quality(data, estacoes_conjugadas, limite=0.9, field='Qualidade'):
     """
     Retorna uma lista filtrada de dados em 'my_list' com base em uma lista de estações conjugadas,
     considerando apenas as datas em que todas as estações (principal e conjugada) têm o valor do campo especificado
     maior que o limite e 'Amplificacao' no intervalo (> 0 e <= 5).
 
     Parâmetros:
-        my_list (list): Lista de dicionários contendo dados das estações.
+        data (list): Lista de dicionários contendo dados das estações.
         estacoes_conjugadas (dict): Dicionário com as estações principais como chaves e suas estações conjugadas como valores.
         limite (float): Limite mínimo para o campo especificado (padrão: 0.9).
         field (str): Nome do campo a ser verificado (padrão: 'Qualidade').
@@ -1706,7 +1708,7 @@ def filter_by_quality(my_list, estacoes_conjugadas, limite=0.9, field='Qualidade
         list: Lista filtrada com dados que atendem aos critérios de qualidade.
     """
     # Converte my_list em um dicionário para acesso mais rápido por estação e data
-    # my_list = eventos_sc
+    my_list = data
     data_index = {}
     for entry in my_list:
         station = entry.get('Estacao')
@@ -2083,7 +2085,7 @@ def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
     return dados_por_data
 
 
-def calculate_conjugate_difference2(data_list, campo='dH_nT'):
+def calculate_conjugate_difference2(data, campo='dH_nT'):
     # data_list = amp_sc_local 
     """
     Calcula a diferença nos valores do campo especificado entre cada estação e sua estação conjugada
@@ -2096,6 +2098,7 @@ def calculate_conjugate_difference2(data_list, campo='dH_nT'):
     Retorna:
         list: Lista atualizada com a diferença adicionada como uma nova coluna "<campo>_diff" no DataFrame "Dados".
     """
+    data_list = data
     # Cria um dicionário para indexar dados por estação e DataHora para fácil consulta
     data_index = {}
     for entry in data_list:
@@ -2122,7 +2125,8 @@ def calculate_conjugate_difference2(data_list, campo='dH_nT'):
 
     return data_list
 
-def estatisticas2(dados_por_data, campo='dH_nT_absacumulado_diff'):
+def estatisticas2(data, campo='dH_nT_absacumulado_diff'):
+    dados_por_data = data
     for item in dados_por_data:
         df_dados = item['Dados']
 
@@ -2133,11 +2137,11 @@ def estatisticas2(dados_por_data, campo='dH_nT_absacumulado_diff'):
                 
     return dados_por_data
 
-def amplificacao_D_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 'H_nT'):
+def amplificacao_D_estacoes_dcampo_abs(data, estacoes_conjugadas, campo = 'H_nT'):
 
     #opção para calcular amplificação para cada estação conjugada
     # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
-
+    eventos_sc = data
     eventos_com_amplificacao = []
     
     # Crie um dicionário para armazenar amplitudes por DataHora e Estação
@@ -2181,11 +2185,11 @@ def amplificacao_D_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 
     
     return eventos_com_amplificacao
 
-def amplificacao_E_estacoes_dcampo_abs(eventos_sc, estacoes_conjugadas, campo = 'H_nT'):
+def amplificacao_E_estacoes_dcampo_abs(data, estacoes_conjugadas, campo = 'H_nT'):
 
     #opção para calcular amplificação para cada estação conjugada
     # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
-
+    eventos_sc = data
     eventos_com_amplificacao = []
     
     # Crie um dicionário para armazenar amplitudes por DataHora e Estação
@@ -2312,7 +2316,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def espectro_frequencia(dados_por_data, campo='H_nT', amostragem=1, interpolacao=True):
+def espectro_frequencia(data, campo='H_nT', amostragem=1, interpolacao=True):
     """
     Calcula o espectro de frequência por transformada de Fourier para uma lista de dados de séries temporais.
     
@@ -2325,9 +2329,10 @@ def espectro_frequencia(dados_por_data, campo='H_nT', amostragem=1, interpolacao
     Retorno:
     - Retorna a lista com o espectro de frequência adicionado a cada item.
     """
+    dados_por_data = data
     for item in dados_por_data:
         df_dados = item['Dados']
-        
+        # print(f"{item['Estacao']} -> {item['DataHora']}:")
         # Obter a série temporal do campo especificado
         if interpolacao:
             serie_temporal = df_dados[campo].interpolate(method='linear', limit_direction='both').values
@@ -2335,19 +2340,29 @@ def espectro_frequencia(dados_por_data, campo='H_nT', amostragem=1, interpolacao
             serie_temporal = df_dados[campo].values
         
         # Aplicar a transformada de Fourier
-        fft_result = np.fft.fft(serie_temporal)
-        frequencias = np.fft.fftfreq(len(serie_temporal), d=amostragem)
-        
-        # Apenas as frequências positivas
-        frequencias_positivas = frequencias[:len(frequencias)//2]
-        amplitudes = np.abs(fft_result)[:len(fft_result)//2]
+        if len(serie_temporal) == 0:
+            # Adicionar os resultados ao item com escala logarítmica
+            item[f'FFT'] = pd.DataFrame({
+                'Frequencia (mHz)': [0],  # Conversão para mHz
+                f'Amplitude_{campo}': [0],
+                f'Log10(Amplitude)_{campo}': [0]  # Adiciona pequena constante para evitar log(0)
+            })
+            continue
+            print("{item['Estacao']} -> {item['DataHora']}:A série temporal está vazia. Verifique os dados de entrada.")
+        else:
+            fft_result = np.fft.fft(serie_temporal)
+            frequencias = np.fft.fftfreq(len(serie_temporal), d=amostragem)
+            # Apenas as frequências positivas
+            frequencias_positivas = frequencias[:len(frequencias)//2]
+            amplitudes = np.abs(fft_result)[:len(fft_result)//2]
         
         # Adicionar os resultados ao item com escala logarítmica
-        item[f'EspectroFFT_{campo}'] = pd.DataFrame({
+        item[f'FFT'] = pd.DataFrame({
             'Frequencia (mHz)': frequencias_positivas * 1000,  # Conversão para mHz
-            'Amplitude': amplitudes,
-            'Log10(Amplitude)': np.log10(amplitudes + 1e-10)  # Adiciona pequena constante para evitar log(0)
+            f'Amplitude_{campo}': amplitudes,
+            f'Log10(Amplitude)_{campo}': np.log10(amplitudes + 1e-10)  # Adiciona pequena constante para evitar log(0)
         })
+
     
     return dados_por_data
 

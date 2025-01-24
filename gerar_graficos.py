@@ -43,7 +43,7 @@ stations = sorted(set(estacoes_conjugadas.keys()).union(estacoes_conjugadas.valu
 
 folder_path = "sc_eventos"
 event_dates = get_events_dates(folder_path)
-# event_dates = event_dates.iloc[[126]]
+event_dates = event_dates.iloc[[1,2]]
 # event_dates = pd.DataFrame({
 #     'Data': ['2016-10-25'],
 #     'Hora': [9.2]
@@ -90,10 +90,12 @@ amp_sc_local_conj_diff = calculate_conjugate_difference2(amp_sc_local,campo=f'd{
 amp_sc_local_conj_diff = calculate_conjugate_difference2(amp_sc_local,campo=f'd{campo}_absacumulado')
 amp_sc_local_conj_diff = estatisticas2(amp_sc_local,campo=f'd{campo}_absacumulado_diff')
 
-amp_sc = amplificacao_D_estacoes_dcampo_abs(amp_sc, estacoes_conjugadas, campo=f'd{campo}_abs')
+amp_sc = amplificacao_D_estacoes_dcampo_abs(amp_sc_local_conj_diff, estacoes_conjugadas, campo=f'd{campo}_abs')
 amp_sc = amplificacao_E_estacoes_dcampo_abs(amp_sc, estacoes_conjugadas, campo=f'd{campo}_absacumulado')
 
-save_data(amp_sc_local_conj_diff, f'Resultados/selected_stations_eventwindow_{tamanho_janela}h.pkl',metadata="")
+fft = espectro_frequencia(amp_sc, campo='H_nT', amostragem=1)
+
+save_data(fft, f'Resultados/selected_stations_eventwindow_{tamanho_janela}h.pkl',metadata="")
 
 #%% plots
 from plots import *
@@ -107,12 +109,12 @@ stations= list(estacoes_conjugadas.keys())
 
 plt.close('all')
 
-datafile_name = f'Resultados/selected_stations_just_events.pkl'
+datafile_name = f'Resultados/selected_stations_eventwindow_2h.pkl'
 metadata, my_list = load_data(datafile_name)
 
 #plota valor 1D (amplificação, rmse, etc)
-my_list_filtered = filter_by_quality(my_list, estacoes_conjugadas,limite=0.9)
-my_list_filtered = my_list
+my_list_filtered = filter_by_quality(my_list, estacoes_conjugadas,limite=0.7)
+
 #%%
 plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_historico_amplificacao_ano_pc5')
 
@@ -143,7 +145,7 @@ plot_event_data(my_list_filtered,
                 parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao', 'Principal')], 
                 stations = stations, 
                 salvar_pdf=True, 
-                datafile_name = f'{campo}_detalhes_full_pc5',
+                datafile_name = f'{campo}_detalhes_filtrado_pc5',
                 view_points=True)
 
 #%%%
@@ -154,10 +156,10 @@ plot_frequency_bars(my_list_filtered, stations, "Amplificacao", titulo=campo, sa
 #%%
 flux_data = get_filtered_solar_flux_data()
 #%%
-# plt.close('all')
+# 
 
 plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations,save_path = f'Resultados/{campo}_Amplificacao_fluxosolar_pc5')
 #%%
 resultado = espectro_frequencia(my_list_filtered, campo='H_nT', amostragem=1)
-plot_espectros_frequencia(resultado, stations,campo = 'Amplitude', salvar_pdf=True, nome_pdf='espectrosFFT.pdf')
+plot_espectros_frequencia(resultado, stations,campo = f'Amplitude_{campo}', salvar_pdf=True, nome_pdf='Resultados/espectrosFFT.pdf')
 mplcursors.cursor(hover=True) 

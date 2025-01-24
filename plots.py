@@ -449,14 +449,14 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     handles_combined = handles_left + handles_right
                     labels_combined = labels_left + labels_right
                     ax.legend(handles_combined, labels_combined, loc='upper right',fontsize=6)
-
+                plt.close('all')
         mplcursors.cursor(hover=True)
         plt.tight_layout()
 
         if salvar_pdf:
             pdf.savefig(fig)
         plt.show()
-
+    
     # Fecha o PDF se ele foi criado
     if salvar_pdf:
         pdf.close()
@@ -1103,13 +1103,13 @@ def plot_espectros_frequencia(data_list, stations, campo='Amplitude', salvar_pdf
             dados_conjugada = next((entry for entry in dados_do_dia if entry.get('Estacao') == conjugada), None) if conjugada else None
 
             # Plota os dados da estação principal
-            if dados_principal and 'EspectroFFT_H_nT' in dados_principal:
-                espectro_principal = dados_principal['EspectroFFT_H_nT']
+            if dados_principal and 'FFT' in dados_principal:
+                espectro_principal = dados_principal['FFT']
                 ax.plot(espectro_principal['Frequencia (mHz)'], espectro_principal[campo], label=f"{station} Principal", color='blue')
 
             # Plota os dados da conjugada
             if dados_conjugada and 'EspectroFFT_H_nT' in dados_conjugada:
-                espectro_conjugada = dados_conjugada['EspectroFFT_H_nT']
+                espectro_conjugada = dados_conjugada['FFT']
                 ax.plot(espectro_conjugada['Frequencia (mHz)'], espectro_conjugada[campo], label=f"{conjugada} Conjugada", color='orange')
 
             # Configurações do gráfico
