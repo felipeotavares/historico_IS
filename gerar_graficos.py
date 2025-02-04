@@ -21,19 +21,21 @@ estacoes_conjugadas = {
     'SMS': 'SJG',
     'ASC': 'GUI',
 }
-# estacoes_conjugadas = {
-#     'SMS': 'SJG',
-#     'ASC': 'GUI',
-#     'GAN': 'ABG',
-#     'KDU': 'KNY',
-#     'PAL': 'KDU',
-#     'ORC': 'SBL',
-#     'HER': 'FUR',
-#     'KMH': 'AQU',
-#     'KHB': 'PAG',
-#     'GNA': 'MZL',
-#     'CNB':'PET'
-# }
+estacoes_conjugadas = {
+    'SMS': 'SJG',
+    'ASC': 'GUI',
+    'GAN': 'ABG',
+    'KDU': 'KNY',
+    'PAL': 'KDU',
+    'ORC': 'SBL',
+    'HER': 'FUR',
+    'KMH': 'AQU',
+    'KHB': 'PAG',
+    'GNA': 'MZL',
+    'CNB': 'PET',
+    'CBA': 'JAT',
+    'CGR': 'BOA'
+}
 
 
 # estacoes_conjugadas = {
@@ -43,7 +45,7 @@ stations = sorted(set(estacoes_conjugadas.keys()).union(estacoes_conjugadas.valu
 
 folder_path = "sc_eventos"
 event_dates = get_events_dates(folder_path)
-event_dates = event_dates.iloc[[1,2]]
+# event_dates = event_dates.iloc[[1,2]]
 # event_dates = pd.DataFrame({
 #     'Data': ['2016-10-25'],
 #     'Hora': [9.2]
@@ -116,50 +118,50 @@ metadata, my_list = load_data(datafile_name)
 my_list_filtered = filter_by_quality(my_list, estacoes_conjugadas,limite=0.7)
 
 #%%
-plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_historico_amplificacao_ano_pc5')
+# plot_amplification_for_stations(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_historico_amplificacao_ano_pc5')
 
-plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_historico_amplificacao_ano_barra_pc5')
+# plot_grouped_bars_by_month(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_historico_amplificacao_ano_barra_pc5')
 
-plot_grouped_bars_by_month(my_list, stations,"Qualidade", titulo=campo , save_path = f'Resultados/{campo}_historico_qualidade_ano_barra_pc5')
+# plot_grouped_bars_by_month(my_list, stations,"Qualidade", titulo=campo , save_path = f'Resultados/{campo}_historico_qualidade_ano_barra_pc5')
 
-mplcursors.cursor(hover=True) 
+# mplcursors.cursor(hover=True) 
 
-plot_event_data(my_list, 
-                intervalo = intervalo, 
-                event_dates = event_dates, 
-                titulo = f'{campo} - Pc5 Todas estações',
-                colunas_eixo_esquerdo=[(campo, 'Principal'), (campo, 'Conjugada')], 
-                colunas_eixo_direito=[(f'{campo}_ajuste', 'Principal'), (f'{campo}_ajuste', 'Conjugada')],
-                parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao', 'Principal')], 
-                stations = stations, 
-                salvar_pdf=True,
-                datafile_name = f'{campo}_detalhes_Pc5',
-                view_points=True)
+# plot_event_data(my_list, 
+#                 intervalo = intervalo, 
+#                 event_dates = event_dates, 
+#                 titulo = f'{campo} - Pc5 Todas estações',
+#                 colunas_eixo_esquerdo=[(campo, 'Principal'), (campo, 'Conjugada')], 
+#                 colunas_eixo_direito=[(f'{campo}_ajuste', 'Principal'), (f'{campo}_ajuste', 'Conjugada')],
+#                 parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao', 'Principal')], 
+#                 stations = stations, 
+#                 salvar_pdf=True,
+#                 datafile_name = f'{campo}_detalhes_Pc5',
+#                 view_points=True)
 
-plot_event_data(my_list_filtered, 
-                intervalo = intervalo, 
-                event_dates = event_dates, 
-                titulo = f'{campo} - Pc5 Qualidade alta',
-                colunas_eixo_esquerdo=[(campo, 'Principal'), (campo, 'Conjugada')], 
-                colunas_eixo_direito=[(f'{campo}_ajuste', 'Principal'), (f'{campo}_ajuste', 'Conjugada')],
-                parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao', 'Principal')], 
-                stations = stations, 
-                salvar_pdf=True, 
-                datafile_name = f'{campo}_detalhes_filtrado_pc5',
-                view_points=True)
+# plot_event_data(my_list_filtered, 
+#                 intervalo = intervalo, 
+#                 event_dates = event_dates, 
+#                 titulo = f'{campo} - Pc5 Qualidade alta',
+#                 colunas_eixo_esquerdo=[(campo, 'Principal'), (campo, 'Conjugada')], 
+#                 colunas_eixo_direito=[(f'{campo}_ajuste', 'Principal'), (f'{campo}_ajuste', 'Conjugada')],
+#                 parametros=[('Qualidade', 'Principal'),('Qualidade', 'Conjugada'),('Amplificacao', 'Principal')], 
+#                 stations = stations, 
+#                 salvar_pdf=True, 
+#                 datafile_name = f'{campo}_detalhes_filtrado_pc5',
+#                 view_points=True)
 
-#%%%
-plot_field_by_local_time(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_TempoLocal_pc5')
-mplcursors.cursor(hover=True) 
-plot_frequency_bars(my_list_filtered, stations, "Amplificacao", titulo=campo, save_path = f'Resultados/{campo}_TempoLocal_barra_pc5')
+# #%%%
+# plot_field_by_local_time(my_list_filtered, stations,"Amplificacao", titulo=campo , save_path = f'Resultados/{campo}_TempoLocal_pc5')
+# mplcursors.cursor(hover=True) 
+# plot_frequency_bars(my_list_filtered, stations, "Amplificacao", titulo=campo, save_path = f'Resultados/{campo}_TempoLocal_barra_pc5')
 
-#%%
-flux_data = get_filtered_solar_flux_data()
-#%%
-# 
+# #%%
+# flux_data = get_filtered_solar_flux_data()
+# #%%
+# # 
 
-plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations,save_path = f'Resultados/{campo}_Amplificacao_fluxosolar_pc5')
-#%%
-resultado = espectro_frequencia(my_list_filtered, campo='H_nT', amostragem=1)
-plot_espectros_frequencia(resultado, stations,campo = f'Amplitude_{campo}', salvar_pdf=True, nome_pdf='Resultados/espectrosFFT.pdf')
-mplcursors.cursor(hover=True) 
+# plot_amplificacao_and_solar_flux(my_list, flux_data, intervalo, stations,save_path = f'Resultados/{campo}_Amplificacao_fluxosolar_pc5')
+# #%%
+# resultado = espectro_frequencia(my_list_filtered, campo='H_nT', amostragem=1)
+# plot_espectros_frequencia(resultado, stations,campo = f'Amplitude_{campo}', salvar_pdf=True, nome_pdf='Resultados/espectrosFFT.pdf')
+# mplcursors.cursor(hover=True) 

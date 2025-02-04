@@ -13,20 +13,58 @@ global_columns = []  # Variável global para armazenar as colunas disponíveis p
 global_columns_Fft = []  # Variável global para armazenar as colunas disponíveis para plotagem
 current_figures = []  # Lista para armazenar figuras atuais para comparação
 
+# def load_data(file_path):
+#     # Carregando os metadados e a lista do arquivo
+#     with open(file_path, 'rb') as file:
+#         # Lê os metadados até o delimitador
+#         metadata = ""
+#         for line in file:
+#             if line.strip() == b'===END_METADATA===':
+#                 break
+#             metadata += line.decode('utf-8')
+
+#         # Carrega a lista serializada
+#         data_list = pickle.load(file)
+    
+#     return metadata, data_list 
+
 def load_data(file_path):
-    # Carregando os metadados e a lista do arquivo
+    """
+    Carrega os dados do arquivo e atualiza a barra de progresso.
+    """
+    # Criar uma nova janela para a barra de progresso
+    progress_window = tk.Toplevel(root)
+    progress_window.title("Carregando Dados")
+    progress_label = tk.Label(progress_window, text="Carregando dados...")
+    progress_label.pack(pady=10)
+    
+    progress_bar = ttk.Progressbar(progress_window, orient="horizontal", mode="determinate")
+    progress_bar.pack(pady=10, padx=20, fill=tk.X)
+
+    # Determinar o número total de linhas no arquivo
+    total_lines = sum(1 for _ in open(file_path, 'rb'))
+    progress_bar["maximum"] = total_lines
+    
+    # Carregar metadados e a lista serializada
+    metadata = ""
+    data_list = None
     with open(file_path, 'rb') as file:
-        # Lê os metadados até o delimitador
-        metadata = ""
-        for line in file:
+        for i, line in enumerate(file):
+            # Atualizar a barra de progresso
+            progress_bar["value"] = i + 1
+            progress_window.update()  # Atualiza a interface gráfica
+            
             if line.strip() == b'===END_METADATA===':
                 break
             metadata += line.decode('utf-8')
-
-        # Carrega a lista serializada
+        
+        # Carregar o restante do arquivo como objeto pickle
         data_list = pickle.load(file)
     
-    return metadata, data_list 
+    # Fechar a janela de progresso após o carregamento
+    progress_window.destroy()
+    return metadata, data_list
+
 def select_file():
     """
     Função para abrir a janela de seleção de arquivo e carregar os dados.
