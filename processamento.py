@@ -769,7 +769,7 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
 #     # data_list = [entry for entry in data_list if entry['Qualidade'] >= 0.8]
     
 #     return data_list
-def quality_data_test(data, intervalo=(-100, 100), campo='H_nT'):
+def quality_data_test(data, intervalo=(-90000, 90000), campo='H_nT'):
     """
     Avalia a qualidade dos dados de uma lista de DataFrames com base em valores válidos, valores não nulos, intervalo de faixas
     e repetição sequencial de valores (para identificar possíveis erros de sensores).
@@ -825,7 +825,8 @@ def quality_data_test(data, intervalo=(-100, 100), campo='H_nT'):
         # 3. Porcentagem de valores dentro do intervalo definido para 'H_nT'
         if campo in dados_janela.columns:
             min_val, max_val = intervalo
-            porcentagem_dentro_faixa = dados_janela[campo].between(min_val, max_val).mean()
+            # porcentagem_dentro_faixa = dados_janela[campo].between(min_val, max_val).mean()
+            porcentagem_dentro_faixa = df[campo].between(min_val, max_val).mean()        
         else:
             porcentagem_dentro_faixa = 0
 
@@ -837,12 +838,19 @@ def quality_data_test(data, intervalo=(-100, 100), campo='H_nT'):
             porcentagem_sem_repeticao = 0
 
         # 5. Cálculo da pontuação final de qualidade
+        # pontuacao_qualidade = (
+        #     porcentagem_validos + 
+        #     porcentagem_nao_nulos + 
+        #     porcentagem_dentro_faixa + 
+        #     porcentagem_sem_repeticao
+        # ) / 4
+        
         pontuacao_qualidade = (
-            porcentagem_validos + 
-            porcentagem_nao_nulos + 
-            porcentagem_dentro_faixa + 
+            porcentagem_validos * 
+            porcentagem_nao_nulos * 
+            porcentagem_dentro_faixa * 
             porcentagem_sem_repeticao
-        ) / 4
+        ) 
 
         # Garantir que a pontuação esteja entre 0 e 1
         entry['Qualidade'] = min(max(pontuacao_qualidade, 0), 1)
@@ -1740,7 +1748,8 @@ def filter_by_quality(data, estacoes_conjugadas, limite=0.9, field='Qualidade'):
             
             if not conjugada_data:
                 all_stations_meet_criteria = False
-                print(f"[{conjugada_data.get('Estacao', 'N/A')}] [{conjugada_data.get('DataHora', 'N/A')}] dados da estação conjugada ausentes")
+                # print(f"[{conjugada_data.get('Estacao', 'N/A')}] [{conjugada_data.get('DataHora', 'N/A')}] dados da estação conjugada ausentes")
+                print(f"{conjugada_data}")
                 break
             
             if conjugada_data.get(field, 0) < limite:
