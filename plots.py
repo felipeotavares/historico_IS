@@ -449,19 +449,19 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
                     handles_combined = handles_left + handles_right
                     labels_combined = labels_left + labels_right
                     ax.legend(handles_combined, labels_combined, loc='upper right',fontsize=6)
-
+                plt.close('all')
         mplcursors.cursor(hover=True)
         plt.tight_layout()
 
         if salvar_pdf:
             pdf.savefig(fig)
         plt.show()
-
+    
     # Fecha o PDF se ele foi criado
     if salvar_pdf:
         pdf.close()
 # %% teste
-def plot_bar_chart_for_stations(my_list, stations, field, save_path=None, titulo = "Sem Titulo"):
+def plot_bar_chart_for_stations(my_list, stations, field,limite_qualidade = 0, save_path=None, titulo = ""):
     """
     Plots a bar chart for the specified field for the given stations.
     Each bar represents the average of the field for the corresponding station.
@@ -486,7 +486,9 @@ def plot_bar_chart_for_stations(my_list, stations, field, save_path=None, titulo
     for station in stations:
         # Filter data for the current station
         station_data = [entry for entry in my_list if entry['Estacao'] == station]
-        values = [entry[field] for entry in station_data]
+        # values = [entry[field] for entry in station_data]
+        
+        values = [entry[field] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
         # print(station)
         conj_station = station_data[0]['Conjugada'] if station_data else ''  # Get conjugated station name if available
         
@@ -509,15 +511,16 @@ def plot_bar_chart_for_stations(my_list, stations, field, save_path=None, titulo
     # Chart settings
     plt.figure(figsize=(6, 8))
     x_positions = np.arange(len(stations))
-    colors = cm.get_cmap('tab10', len(stations))  # Define a color map for different stations
+    colors = cm.get_cmap('Accent', len(stations))  # Define a color map for different stations
     
     # Plot bars with mean and standard deviation, each station with a different color
     bars = plt.bar(x_positions, station_means, yerr=station_stds, capsize=5, alpha=0.7, color=[colors(i) for i in range(len(stations))])
     
     # Add text indicating the number of data points and the standard deviation for each bar
-    for bar, std, count in zip(bars, station_stds, station_counts):
-        plt.text(bar.get_x(), bar.get_height(), f'N={count} σ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
-    
+    for bar, std, count, mean in zip(bars, station_stds, station_counts,station_means):
+        # plt.text(bar.get_x(), bar.get_height(), f'N={count} \nσ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
+        plt.text(bar.get_x(), 0, f'$\mu$={mean:.2f} \nN={count} \nσ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
+
     # Axis and title settings
     plt.xlabel('Station', fontsize=14)
     plt.ylabel(field, fontsize=14)
@@ -534,7 +537,7 @@ def plot_bar_chart_for_stations(my_list, stations, field, save_path=None, titulo
         plt.savefig(save_path)
     plt.show()
     
-def plot_scatter_for_stations(data_list, stations, field, save_path=None,titulo = "Sem Titulo"):
+def plot_scatter_for_stations(data_list, stations, field,limite_qualidade=0, save_path=None,titulo = ""):
     """
     Plots a scatter plot for the specified field for the given stations.
     Each point represents the value of the field for a specific entry.
@@ -552,16 +555,21 @@ def plot_scatter_for_stations(data_list, stations, field, save_path=None,titulo 
     
     # Chart settings
     plt.figure(figsize=(6, 8))
-    colors = cm.get_cmap('tab10', len(stations))  # Define a color map for different stations
+    colors = cm.get_cmap('Accent', len(stations))  # Define a color map for different stations
+    x_positions = np.arange(len(stations))
     
+    station_labels = []
     # Plot points for each station
     for idx, station in enumerate(stations):
         station_data = [entry for entry in data_list if entry['Estacao'] == station]
-        values = [entry[field] for entry in station_data if entry[field] is not None]
+        # values = [entry[field] for entry in station_data if entry[field] is not None]    
+        values = [entry[field] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
         values = np.array(values, dtype=np.float32)  # Convert to numpy array to handle NaN
+
+        conj_station = station_data[0]['Conjugada'] if station_data else ''  # Get conjugated station name if available
     
         # Scatter plot of individual values
-        plt.scatter([station] * len(values), values, label=f'{station}', color=colors(idx), alpha=0.6, edgecolors='w', s=100)
+        plt.scatter([station] * len(values), values, color=colors(idx), alpha=0.6, edgecolors='w', s=100)
     
         # Calculate mean and standard deviation, ignoring NaN values
         mean_value = np.nanmean(values)
@@ -575,15 +583,20 @@ def plot_scatter_for_stations(data_list, stations, field, save_path=None,titulo 
     
         # Plot mean and standard deviation with the number of amplifications > 1 and total events
         plt.errorbar(station, mean_value, yerr=std_dev, fmt='o', color='red', ecolor='black', capsize=5, markersize=10)
-        plt.text(station, mean_value, f' ({num_amplification_gt_1}/{total_events})', color='blue', fontsize=14, ha='left', va='bottom')
-    
+        plt.text(station, mean_value, f'  {num_amplification_gt_1}/{total_events}\n  $\mu$={mean_value:.2f}\n  σ={std_dev:.2f}', color='blue', fontsize=14, ha='left', va='bottom')
+        
+        # plt.text(bar.get_x(), 0, f'$\mu$={mean:.2f} \nN={count} \nσ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
+        station_labels.append(f'{station}/{conj_station}')
+        
     # Axis and title settings
-    plt.xlabel('Station', fontsize=14)
+    plt.xlabel('Estações', fontsize=14)
     plt.ylabel(field, fontsize=14)
     plt.title(titulo, fontsize=16)
-    plt.xticks(rotation=45, ha='right', fontsize=12)
+    plt.xticks(ticks=x_positions,labels=station_labels,rotation=45, ha='right', fontsize=12)
+
+
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.legend(title='Stations', loc='best')
+    # plt.legend(title='Estações', loc='best')
     
     # Adjust layout
     plt.tight_layout()
@@ -594,7 +607,7 @@ def plot_scatter_for_stations(data_list, stations, field, save_path=None,titulo 
     plt.show()
 
 # %%teste2
-def plot_amplification_for_stations(my_list, stations, field, save_path=None, titulo="Sem Titulo"):
+def plot_amplification_for_stations(my_list, stations, field,limite_qualidade = 0, save_path=None, titulo="Sem Titulo"):
     """
     Plota o campo especificado ao longo do tempo como pontos para as estações especificadas
     e adiciona uma linha da média e desvio padrão para cada estação em gráficos separados, um embaixo do outro.
@@ -621,9 +634,11 @@ def plot_amplification_for_stations(my_list, stations, field, save_path=None, ti
         conjugada = station_data[0]['Conjugada']
 
         # Obtém os valores de tempo e do campo especificado
-        times = [entry['DataHora'] for entry in station_data]
-        values = [entry[field] for entry in station_data]
-
+        # times = [entry['DataHora'] for entry in station_data]
+        # values = [entry[field] for entry in station_data]
+        
+        times = [entry['DataHora'] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
+        values = [entry[field] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
         # Incrementa o contador de pontos de dados
         total_data_points += len(values)
 
@@ -634,7 +649,8 @@ def plot_amplification_for_stations(my_list, stations, field, save_path=None, ti
         ax = axes[idx] if len(stations) > 1 else axes
 
         # Plota os dados do campo especificado ao longo do tempo como pontos para a estação
-        ax.scatter(times, values, alpha=0.7, color=color, label=station)
+        # ax.scatter(times, values, alpha=0.7, color=color, label=station)
+        ax.scatter(times, values, alpha=0.7, color=color)
 
         # Calcula e plota a linha da média e desvio padrão para a estação
         if values:  # Verifica se há dados
@@ -648,7 +664,7 @@ def plot_amplification_for_stations(my_list, stations, field, save_path=None, ti
         ax.set_title(f"{station}/{conjugada}  Total pontos: {total_data_points}", fontsize=16)
         ax.legend(fontsize=12)
         ax.grid(True)
-        ax.set_ylim(0, 3.2)
+        # ax.set_ylim(0, 3.2)
         
         # Configurar eixo x com passo mensal
         ax.xaxis.set_major_locator(mdates.MonthLocator())
@@ -1103,13 +1119,13 @@ def plot_espectros_frequencia(data_list, stations, campo='Amplitude', salvar_pdf
             dados_conjugada = next((entry for entry in dados_do_dia if entry.get('Estacao') == conjugada), None) if conjugada else None
 
             # Plota os dados da estação principal
-            if dados_principal and 'EspectroFFT_H_nT' in dados_principal:
-                espectro_principal = dados_principal['EspectroFFT_H_nT']
+            if dados_principal and 'FFT' in dados_principal:
+                espectro_principal = dados_principal['FFT']
                 ax.plot(espectro_principal['Frequencia (mHz)'], espectro_principal[campo], label=f"{station} Principal", color='blue')
 
             # Plota os dados da conjugada
             if dados_conjugada and 'EspectroFFT_H_nT' in dados_conjugada:
-                espectro_conjugada = dados_conjugada['EspectroFFT_H_nT']
+                espectro_conjugada = dados_conjugada['FFT']
                 ax.plot(espectro_conjugada['Frequencia (mHz)'], espectro_conjugada[campo], label=f"{conjugada} Conjugada", color='orange')
 
             # Configurações do gráfico
