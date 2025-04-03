@@ -1011,6 +1011,53 @@ def amplificacao_estacoes_dH_nT_abs(eventos_sc, estacoes_conjugadas):
     
     return eventos_com_amplificacao
 
+def amplificacao_estacoes_Pc5(eventos_sc, estacoes_conjugadas):
+
+    #opção para calcular amplificação para cada estação conjugada
+    # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
+
+    eventos_com_amplificacao = []
+    
+    # Crie um dicionário para armazenar amplitudes por DataHora e Estação
+    amplitudes_por_datahora = {}
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        amplitude = evento['Amplitude_Pc5']
+        
+        if datahora not in amplitudes_por_datahora:
+            amplitudes_por_datahora[datahora] = {}
+        
+        amplitudes_por_datahora[datahora][estacao] = amplitude
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        
+        amplificacao = None
+        
+        if datahora in amplitudes_por_datahora:
+            # estacao_conjugada_nome = estacoes_conjugadas.get(estacao, estacoes_conjugadas_reverso.get(estacao))
+            estacao_conjugada_nome = estacoes_conjugadas.get(estacao, None)
+
+            if estacao_conjugada_nome:
+                conjugada_amplitude = amplitudes_por_datahora[datahora].get(estacao_conjugada_nome, None)
+                
+                if conjugada_amplitude is not None and conjugada_amplitude != 0:
+                    estacao_amplitude = amplitudes_por_datahora[datahora].get(estacao, None)
+                    if estacao_amplitude is not None:
+                        amplificacao = estacao_amplitude / conjugada_amplitude
+                else:
+                    amplificacao = None
+            else:
+                amplificacao = None
+        
+        evento_com_amplificacao = evento.copy()
+        evento_com_amplificacao['Amplificacao_Pc5'] = amplificacao
+        eventos_com_amplificacao.append(evento_com_amplificacao)
+    
+    return eventos_com_amplificacao
 def amplificacao_estacoes_dH_nT_absacumulado(eventos_sc, estacoes_conjugadas):
 
     #opção para calcular amplificação para cada estação conjugada
@@ -1205,7 +1252,7 @@ def offset(data, mode='igrf', campo='H_nT'):
     dados_por_data = data 
     for item in dados_por_data:
         df_dados = item['Dados']
-        print(f"offset:{item['Estacao']}->{item['DataHora']}-> {item.get(f'igrf_{campo}', 'N/A')}")
+        # print(f"offset:{item['Estacao']}->{item['DataHora']}-> {item.get(f'igrf_{campo}', 'N/A')}")
         
         if mode == 'igrf':
             # Offset pelo valor do IGRF
@@ -1224,8 +1271,6 @@ def offset(data, mode='igrf', campo='H_nT'):
             raise ValueError("Modo inválido! Escolha 'igrf' ou 'first_value'.")
     
     return dados_por_data
-
-
 
 def recorte_evento(dado, tamanho_janela):
     
@@ -1520,6 +1565,62 @@ def caract_wavelet_amplitude(dados_janela, coluna, wavelet='db4', level=2):
 
     return y_detail, L, ponto_esquerda, ponto_direita, residual, r_squared, rmse
 
+def caract_wavelet_amplitude2(dados_janela, coluna, wavelet='db4', level=3, tamanho_janela=50):
+    # Extrair dados da coluna específica e preencher NaNs com interpolação
+    y_data = dados_janela[coluna].values
+    y_data = pd.Series(y_data).interpolate().ffill().bfill().values
+
+    # Remover infs
+    mask = ~np.isinf(y_data)
+    y_data = y_data[mask]
+
+    # Verificar se temos dados suficientes
+    if len(y_data) < 2 * tamanho_janela or np.isnan(y_data).all():
+        return np.nan, np.nan,[np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    # Aplicar a transformada wavelet discreta
+    coeffs = pywt.wavedec(y_data, wavelet, level=level)
+    y_detail = pywt.waverec(coeffs, wavelet)
+    y_detail = y_detail[:len(y_data)]
+
+    # Índice central
+    centro = len(y_detail) // 2
+    metade_janela = tamanho_janela // 4
+
+    # Verifica se há dados suficientes para ambas as janelas
+    if centro >= (tamanho_janela + metade_janela) and centro + metade_janela <= len(y_detail):
+        janela_central = y_detail[centro - metade_janela : centro + metade_janela]
+        valores_anteriores = y_detail[centro - tamanho_janela - metade_janela : centro - metade_janela]
+
+        max_janela = np.max(janela_central)
+        media_anteriores = np.mean(valores_anteriores)
+
+        # Nova amplitude
+        L = max_janela - media_anteriores
+
+        # Índices dos extremos
+        min_idx = centro - tamanho_janela - metade_janela + np.argmin(valores_anteriores)
+        max_idx = centro - metade_janela + np.argmax(janela_central)
+    else:
+        return np.nan,np.nan,[np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    if max_idx >= len(dados_janela) or min_idx >= len(dados_janela):
+        return np.nan,np.nan,[np.nan, np.nan], [np.nan, np.nan], np.nan, np.nan, np.nan
+
+    posicao_esquerda = dados_janela.iloc[min_idx]['TIME']
+    posicao_direita = dados_janela.iloc[max_idx]['TIME']
+    
+    ponto_esquerda = [posicao_esquerda, y_detail[min_idx]]
+    ponto_direita = [posicao_direita, y_detail[max_idx]]
+
+    rmse = np.sqrt(np.mean((y_data - y_detail) ** 2))
+    ss_res = np.sum((y_data - y_detail) ** 2)
+    ss_tot = np.sum((y_data - np.mean(y_data)) ** 2)
+    r_squared = 1 - (ss_res / ss_tot)
+
+    residual = 0
+
+    return y_detail, L, ponto_esquerda, ponto_direita, residual, r_squared, rmse
 
 def sigmoid(x, L, x0, k, b):
     # Limitar o valor da exponencial para evitar overflow
@@ -2009,7 +2110,10 @@ def load_data(file_path):
 # metadata2, data_list2 = load_data('selected_statios_just_events.pkl')
 #%% testes 2
 def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
+    # data = eventos_sc
+
     dados_por_data = data
+    
     for item in dados_por_data:
         df_dados = item['Dados']
 
@@ -2029,7 +2133,7 @@ def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
 
             df_dados['DateTime'] = float('nan')
 
-            for suffix in ['D', 'E']:
+            for suffix in ['D', 'E','Pc5']:
                 for metric in ['Ponto_Esquerda', 'Ponto_Direita', 'Residual', 'R_squared', 'RMSE', 'Amplitude']:
                     item[f'{metric}_{suffix}'] = float('nan')
 
@@ -2049,7 +2153,9 @@ def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
         if filtro == 'iir-pc5':
             ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_iir_amplitude(df_dados, campo, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2)
         elif filtro == 'wavelet':
-            ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, campo)
+            # ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude(df_dados, campo)
+            ajuste, amplitude, ponto_esquerda, ponto_direita, residual, r_squared, rmse = caract_wavelet_amplitude2(df_dados, campo)
+
         else:
             print(f"Tipo de sinal '{sinal}' não reconhecido. Use 'pc5' ou 'H'.")
         
@@ -2057,10 +2163,11 @@ def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
 
         df_dados[f'd{campo}_abs'] = df_dados[f'd{campo}'].abs()
         df_dados[f'd{campo}_absacumulado'] = df_dados[f'd{campo}_abs'].cumsum()
-        df_dados[f'd{campo}_drmsacumulado'] = df_dados[f'd{campo}_absacumulado'].diff()
+        df_dados[f'd{campo}_drmsacumulado'] = df_dados[f'd{campo}_absacumulado'].diff()  #aparentemente desnecessario, verificar retirada
 
         ajuste_abs, amplitude_D, ponto_esquerda_D, ponto_direita_D, residual_D, r_squared_D, rmse_D = caract_wavelet_amplitude(df_dados, f'd{campo}_abs')
         ajuste_acum, amplitude_E, ponto_esquerda_E, ponto_direita_E, residual_E, r_squared_E, rmse_E = caract_wavelet_amplitude(df_dados, f'd{campo}_absacumulado')
+        df_dados[f'{campo}_Pc5'], amplitude_Pc5, ponto_esquerda_Pc5, ponto_direita_Pc5, residual_Pc5, r_squared_Pc5, rmse_Pc5 = caract_iir_amplitude(df_dados, campo, low_cut=1.6e-3, high_cut=7e-3, fs=1/60, order=2)
 
         df_dados[f'd{campo}_abs_ajuste'] = ajuste_abs
         df_dados[f'd{campo}_absacumulado_ajuste'] = ajuste_acum
@@ -2088,6 +2195,13 @@ def derivativas2(data, campo='H_nT', filtro = 'wavelet'):
         item['R_squared_E'] = r_squared_E
         item['RMSE_E'] = rmse_E
         item['Amplitude_E'] = amplitude_E
+        
+        item['Ponto_Esquerda_Pc5'] = ponto_esquerda_Pc5
+        item['Ponto_Direita_Pc5'] = ponto_direita_Pc5
+        item['Residual_Pc5'] = residual_Pc5
+        item['R_squared_Pc5'] = r_squared_Pc5
+        item['RMSE_Pc5'] = rmse_Pc5
+        item['Amplitude_Pc5'] = amplitude_Pc5
 
         item['Dados'] = df_dados
 
@@ -2208,6 +2322,54 @@ def amplificacao_E_estacoes_dcampo_abs(data, estacoes_conjugadas, campo = 'H_nT'
         datahora = evento['DataHora']
         estacao = evento['Estacao']
         amplitude = evento['Amplitude_E']
+        
+        if datahora not in amplitudes_por_datahora:
+            amplitudes_por_datahora[datahora] = {}
+        
+        amplitudes_por_datahora[datahora][estacao] = amplitude
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        
+        amplificacao = None
+        
+        if datahora in amplitudes_por_datahora:
+            # estacao_conjugada_nome = estacoes_conjugadas.get(estacao, estacoes_conjugadas_reverso.get(estacao))
+            estacao_conjugada_nome = estacoes_conjugadas.get(estacao, None)
+
+            if estacao_conjugada_nome:
+                conjugada_amplitude = amplitudes_por_datahora[datahora].get(estacao_conjugada_nome, None)
+                
+                if conjugada_amplitude is not None and conjugada_amplitude != 0:
+                    estacao_amplitude = amplitudes_por_datahora[datahora].get(estacao, None)
+                    if estacao_amplitude is not None:
+                        amplificacao = estacao_amplitude / conjugada_amplitude
+                else:
+                    amplificacao = None
+            else:
+                amplificacao = None
+        
+        evento_com_amplificacao = evento.copy()
+        evento_com_amplificacao[f'Amplificacao_{campo}'] = amplificacao
+        eventos_com_amplificacao.append(evento_com_amplificacao)
+    
+    return eventos_com_amplificacao
+
+def amplificacao_Pc5(data, estacoes_conjugadas, campo = 'H_nT'):
+
+    #opção para calcular amplificação para cada estação conjugada
+    # estacoes_conjugadas_reverso = {v: k for k, v in estacoes_conjugadas.items()}
+    eventos_sc = data
+    eventos_com_amplificacao = []
+    
+    # Crie um dicionário para armazenar amplitudes por DataHora e Estação
+    amplitudes_por_datahora = {}
+    
+    for evento in eventos_sc:
+        datahora = evento['DataHora']
+        estacao = evento['Estacao']
+        amplitude = evento['Amplitude_Pc5']
         
         if datahora not in amplitudes_por_datahora:
             amplitudes_por_datahora[datahora] = {}
@@ -2375,4 +2537,45 @@ def espectro_frequencia(data, campo='H_nT', amostragem=1, interpolacao=True):
     
     return dados_por_data
 
+#%%teste 4
+def print_events_outside_range(my_list, stations, field, min_threshold, max_threshold, excluir=False):
+    """
+    Imprime a data, o nome da estação, o valor do campo e o verbose para os eventos
+    em que o valor do campo especificado está fora da faixa definida por min_threshold e max_threshold.
+    Se excluir=True, remove os eventos fora da faixa e retorna a lista filtrada.
 
+    Parâmetros:
+        my_list (list): Lista de dicionários contendo dados das estações.
+        stations (list): Lista de estações a serem verificadas.
+        field (str): Campo a ser verificado (ex: 'Amplificacao').
+        min_threshold (float): Valor mínimo da faixa.
+        max_threshold (float): Valor máximo da faixa.
+        excluir (bool): Se True, remove os eventos fora da faixa e retorna a lista filtrada.
+
+    Retorna:
+        list: A lista original (se excluir=False) ou a lista com os eventos fora da faixa removidos.
+    """
+    print(f"Eventos com '{field}' FORA da faixa [{min_threshold}, {max_threshold}]:\n")
+
+    nova_lista = []
+    removidos = 0
+
+    for entry in my_list:
+        estacao = entry.get('Estacao')
+        value = entry.get(field, None)
+
+        if estacao in stations and isinstance(value, (int, float)):
+            if value < min_threshold or value > max_threshold:
+                data_str = pd.to_datetime(entry['DataHora']).strftime('%Y-%m-%d %H:%M')
+                conjugada = entry.get('Conjugada', 'N/A')
+                verbose = entry.get('Qualidade verbose', 'N/A')
+                print(f"{data_str} - Estação: {estacao} / {conjugada} - {field}: {value:.2f} \n{verbose}\n")
+                if excluir:
+                    removidos += 1
+                    continue  # pula esse evento se for para excluir
+        nova_lista.append(entry)  # mantém evento se dentro da faixa ou não for da estação-alvo
+
+    if excluir:
+        print(f"\nTotal de eventos removidos: {removidos}")
+
+    return nova_lista if excluir else my_list

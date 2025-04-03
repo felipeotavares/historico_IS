@@ -132,6 +132,9 @@ def update_dates():
     global global_my_list
 
     selected_stations = [station for station, var in station_vars.items() if var.get()]
+    
+    # Salva a data atualmente selecionada
+    current_date = date_combobox.get()
     date_combobox['values'] = []  # Limpa o combobox
 
     if not selected_stations:
@@ -144,13 +147,18 @@ def update_dates():
         station_date_sets.append(dates)
 
     # Interseção de todas as datas
-    common_dates = set.intersection(*station_date_sets)
+    common_dates = sorted(set.intersection(*station_date_sets))
+    date_strings = [date.strftime("%Y-%m-%d %H:%M") for date in common_dates]
 
-    date_combobox['values'] = [date.strftime("%Y-%m-%d %H:%M") for date in sorted(common_dates)]
-    if date_combobox['values']:
-        date_combobox.current(0)  # Seleciona a primeira data por padrão
-        
-    # draw_graphs()
+    date_combobox['values'] = date_strings
+
+    if date_strings:
+        # Restaura a data anterior, se ela ainda existir
+        if current_date in date_strings:
+            date_combobox.set(current_date)
+        else:
+            date_combobox.current(0)
+
 
 def plot_timeseries(event, compare=False):
     """
@@ -220,11 +228,10 @@ def compare_plot():
 
 def show_selected_info(event):
     """
-    Exibe todas as informações do evento selecionado em uma caixa de texto.
+    Exibe todas as informações do evento selecionado em uma caixa de texto formatada com tabela.
     """
     global global_my_list
     selected_date = date_combobox.get()
-
     selected_stations = [station for station, var in station_vars.items() if var.get()]
 
     if not selected_stations:
@@ -233,10 +240,22 @@ def show_selected_info(event):
     for event in global_my_list:
         if event['DataHora'].strftime("%Y-%m-%d %H:%M") == selected_date and event['Estacao'] in selected_stations:
             info_textbox.delete(1.0, tk.END)
+
+            header = f"{'Chave':<22} | {'Valor'}\n"
+            divider = f"{'-' * 22}-+-{'-' * 60}\n"
+            info_textbox.insert(tk.END, header)
+            info_textbox.insert(tk.END, divider)
+
             for key, value in event.items():
-                if not key == 'Dados' and not key== 'FFT':
-                    info_textbox.insert(tk.END, f"{key}: {value}\n")
+                if key not in ['Dados', 'FFT']:
+                    key_str = f"{key:<22}"
+                    value_str = str(value)
+                    if len(value_str) > 60:
+                        value_str = value_str[:57] + "..."
+                    info_textbox.insert(tk.END, f"{key_str} | {value_str}\n")
+
             break
+
 
 def draw_graphs(event):
     """
@@ -298,10 +317,35 @@ field_combobox_fft.pack(pady=5)
 field_combobox_fft.bind("<<ComboboxSelected>>", draw_graphs)
 
 # Textbox para exibir informações detalhadas do evento selecionado
-info_label = tk.Label(main_frame, text="Informações do Evento:")
-info_label.pack(pady=5)
-info_textbox = tk.Text(main_frame, height=10, width=30)
-info_textbox.pack(pady=5)
+# info_label = tk.Label(main_frame, text="Informações do Evento:")
+# info_label.pack(pady=5)
+# info_textbox = tk.Text(main_frame, height=10, width=30)
+# info_textbox.pack(pady=5)
+ # Frame para conter a Textbox e Scrollbar
+info_frame = tk.Frame(main_frame)
+info_frame.pack(pady=5, fill=tk.BOTH, expand=True)
+
+# Scrollbars
+scrollbar_y = tk.Scrollbar(info_frame, orient=tk.VERTICAL)
+scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+scrollbar_x = tk.Scrollbar(info_frame, orient=tk.HORIZONTAL)
+scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+
+# Textbox com barra de rolagem
+info_textbox = tk.Text(
+    info_frame,
+    height=10,
+    width=40,
+    font=("Courier", 10),
+    wrap=tk.NONE,
+    yscrollcommand=scrollbar_y.set,
+    xscrollcommand=scrollbar_x.set
+)
+info_textbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+scrollbar_y.config(command=info_textbox.yview)
+scrollbar_x.config(command=info_textbox.xview)
 
 # Botão para comparar gráficos
 compare_button = tk.Button(main_frame, text="Comparar com Novo Gráfico", command=compare_plot)
