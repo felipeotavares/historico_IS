@@ -30,6 +30,49 @@ import datetime as dt
 # Fechar todos os gráficos abertos ao iniciar o script
 plt.close('all')
 
+label_map = {
+    'DataHora': 'Data e Hora (UTC)',
+    'Hora': 'Hora (UTC)',
+    'Estacao': 'Estação',
+    'Dados': 'Dados do Campo Magnético',
+    'Cidade': 'Cidade',
+    'Latitude': 'Latitude (graus)',
+    'Longitude': 'Longitude (graus)',
+    'Altitude': 'Altitude (m)',
+    'igrf_H_nT': 'IGRF H (nT)',
+    'igrf_D_deg': 'IGRF D (graus)',
+    'igrf_Z_nT': 'IGRF Z (nT)',
+    'Qualidade': 'Qualidade (nível)',
+    'Qualidade verbose': 'Descrição da Qualidade',
+    'Conjugada': 'Estação Conjugada',
+    'Ponto_Esquerda_A': 'Ponto Inicial (A)',
+    'Ponto_Direita_A': 'Ponto Final (A)',
+    'Residual_A': 'Resíduo (A)',
+    'R_squared_A': r'$R^2$ (A)',
+    'RMSE_A': r'RMSE (A) (nT)',
+    'Amplitude': 'Amplitude (nT)',
+    'Ponto_Esquerda_D': 'Ponto Inicial (D)',
+    'Ponto_Direita_D': 'Ponto Final (D)',
+    'Residual_D': 'Resíduo (D)',
+    'R_squared_D': r'$R^2$ (D)',
+    'RMSE_D': r'RMSE (D) (nT)',
+    'Amplitude_D': 'Amplitude D (nT)',
+    'Ponto_Esquerda_E': 'Ponto Inicial (E)',
+    'Ponto_Direita_E': 'Ponto Final (E)',
+    'Residual_E': 'Resíduo (E)',
+    'R_squared_E': r'$R^2$ (E)',
+    'RMSE_E': r'RMSE (E) (nT)',
+    'Amplitude_E': 'Amplitude E (nT)',
+    'Amplificacao': 'A-SC (adim.)',
+    'FusoHorario': 'Fuso Horário',
+    'TempoLocal': 'Tempo Local',
+    'RMSE_dH_nT_absacumulado_diff': r'Diferença acumulada de RMSE $|\frac{dH}{dt}|$ (nT)',
+    'Amplificacao_dH_nT_abs': r'Variação Instantânea - V-SC (nT)',
+    'Amplificacao_dH_nT_absacumulado': 'Pertubação Acumulada \n PA-SC (nT)',
+    'Amplificacao_H_nT_Pc5': r'Amplificação PC5 - PC5-SC (nT)',
+    'FFT': r'Espectro de Fourier (FFT)'
+}
+
 #%% Carregamento dos Metadados e Lista de Dados
 def load_data(file_path):
     # Carregando os metadados e a lista do arquivo
@@ -461,7 +504,7 @@ def plot_event_data(data_list, intervalo, event_dates, colunas_eixo_esquerdo, co
     if salvar_pdf:
         pdf.close()
 # %% teste
-def plot_bar_chart_for_stations(my_list, stations, field,limite_qualidade = 0, save_path=None, titulo = ""):
+def plot_bar_chart_for_stations(my_list, stations, field,limite_qualidade = 0, save_path=None, titulo = "",show=False):
     """
     Plots a bar chart for the specified field for the given stations.
     Each bar represents the average of the field for the corresponding station.
@@ -522,8 +565,9 @@ def plot_bar_chart_for_stations(my_list, stations, field,limite_qualidade = 0, s
         plt.text(bar.get_x(), 0, f'$\mu$={mean:.2f} \nN={count} \nσ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
 
     # Axis and title settings
-    plt.xlabel('Station', fontsize=14)
-    plt.ylabel(field, fontsize=14)
+    plt.xlabel('Estação', fontsize=14)
+    y_label = label_map.get(field, field)
+    plt.ylabel(y_label, fontsize=14)
     # plt.title(f'Média {field} (dH/dt)² por estação', fontsize=16)
     plt.title(titulo, fontsize=16)
     plt.xticks(ticks=x_positions, labels=station_labels, rotation=45, ha='right', fontsize=12)
@@ -537,7 +581,72 @@ def plot_bar_chart_for_stations(my_list, stations, field,limite_qualidade = 0, s
         plt.savefig(save_path)
     plt.show()
     
-def plot_scatter_for_stations(data_list, stations, field,limite_qualidade=0, save_path=None,titulo = ""):
+def plot_bar_chart_for_stations2(my_list, stations, field, limite_qualidade=0, save_path=None, titulo="", show=False):
+    """
+    Plots a bar chart for the specified field for the given stations.
+    Each bar represents the average of the field for the corresponding station.
+    
+    Parameters:
+        my_list (list): List of dictionaries containing station data.
+        stations (list): List of stations to be plotted.
+        field (str): Field to be plotted (e.g., 'Amplification').
+        limite_qualidade (float): Minimum quality threshold to consider.
+        save_path (str, optional): Path to save the figure. If None, the figure is not saved.
+        titulo (str): Title for the plot.
+        show (bool): Whether to call plt.show().
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+
+    station_means = []
+    station_stds = []
+    station_counts = []
+    station_labels = []
+
+    for station in stations:
+        station_data = [entry for entry in my_list if entry['Estacao'] == station]
+        values = [entry[field] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
+        conj_station = station_data[0]['Conjugada'] if station_data else ''
+        
+        if values:
+            mean_value = np.nanmean(values)
+            std_value = np.nanstd(values)
+            count_value = len(values)
+        else:
+            mean_value = 0
+            std_value = 0
+            count_value = 0
+
+        station_means.append(mean_value)
+        station_stds.append(std_value)
+        station_counts.append(count_value)
+        station_labels.append(f'{station}/{conj_station}')
+    
+    x_positions = np.arange(len(stations))
+    colors = cm.get_cmap('Accent', len(stations))
+    
+    bars = plt.bar(x_positions, station_means, yerr=station_stds, capsize=5, alpha=0.8,
+                   color=[colors(i) for i in range(len(stations))],error_kw={'ecolor': 'red'})
+    
+    for bar, std, count, mean in zip(bars, station_stds, station_counts, station_means):
+        plt.text(bar.get_x(), 0, f'$\mu$={mean:.2f} \nN={count} \nσ={std:.2f}',
+                 ha='left', va='bottom', fontsize=12, color='black')
+
+    plt.xlabel('Estação', fontsize=14)
+    y_label = label_map.get(field, field)
+    plt.ylabel(y_label, fontsize=14)
+    plt.title(titulo, fontsize=16)
+    plt.xticks(ticks=x_positions, labels=station_labels, rotation=45, ha='right', fontsize=12)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+
+def plot_scatter_for_stations(data_list, stations, field,limite_qualidade=0, save_path=None,titulo = "",show=False):
     """
     Plots a scatter plot for the specified field for the given stations.
     Each point represents the value of the field for a specific entry.
@@ -588,9 +697,12 @@ def plot_scatter_for_stations(data_list, stations, field,limite_qualidade=0, sav
         # plt.text(bar.get_x(), 0, f'$\mu$={mean:.2f} \nN={count} \nσ={std:.2f}', ha='left', va='bottom', fontsize=12, color='black')
         station_labels.append(f'{station}/{conj_station}')
         
+            
     # Axis and title settings
     plt.xlabel('Estações', fontsize=14)
-    plt.ylabel(field, fontsize=14)
+    # plt.ylabel(field, fontsize=14)
+    y_label = label_map.get(field, field)
+    plt.ylabel(y_label, fontsize=14)
     plt.title(titulo, fontsize=16)
     plt.xticks(ticks=x_positions,labels=station_labels,rotation=45, ha='right', fontsize=12)
 
@@ -605,6 +717,64 @@ def plot_scatter_for_stations(data_list, stations, field,limite_qualidade=0, sav
     if save_path:
         plt.savefig(save_path)
     plt.show()
+    
+def plot_scatter_for_stations2(data_list, stations, field, limite_qualidade=0, save_path=None, titulo="", show=False):
+    """
+    Plots a scatter plot for the specified field for the given stations.
+    Each point represents the value of the field for a specific entry.
+    Additionally, plots the mean and standard deviation for each station.
+    
+    Parameters:
+        data_list (list): List of dictionaries containing station data.
+        stations (list): List of stations to be plotted.
+        field (str): Field to be plotted (e.g., 'Amplification').
+        limite_qualidade (float): Minimum quality threshold.
+        save_path (str, optional): Path to save the figure. If None, the figure is not saved.
+        titulo (str): Title for the plot.
+        show (bool): Whether to show the plot (used when calling standalone).
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+    import numpy as np
+    
+    colors = cm.get_cmap('Accent', len(stations))
+    x_positions = np.arange(len(stations))
+    station_labels = []
+    
+    for idx, station in enumerate(stations):
+        station_data = [entry for entry in data_list if entry['Estacao'] == station]
+        values = [entry[field] for entry in station_data if entry['Qualidade'] >= limite_qualidade]
+        values = np.array(values, dtype=np.float32)
+
+        conj_station = station_data[0]['Conjugada'] if station_data else ''
+        
+        # Scatter individual values
+        plt.scatter([idx] * len(values), values, color=colors(idx), alpha=0.6, edgecolors='w', s=100)
+        
+        mean_value = np.nanmean(values)
+        std_dev = np.nanstd(values)
+        num_amplification_gt_1 = np.sum(values > 1)
+        total_events = len(values)
+
+        plt.errorbar(idx, mean_value, yerr=std_dev, fmt='o', color='red', ecolor='black',
+                     capsize=5, markersize=10)
+        plt.text(idx, mean_value, f'  {num_amplification_gt_1}/{total_events}\n  $\mu$={mean_value:.2f}\n  σ={std_dev:.2f}',
+                 color='blue', fontsize=12, ha='left', va='bottom')
+        
+        station_labels.append(f'{station}/{conj_station}')
+    
+    plt.xlabel('Estações', fontsize=14)
+    y_label = label_map.get(field, field)
+    plt.ylabel(y_label, fontsize=14)
+    plt.title(titulo, fontsize=16)
+    plt.xticks(ticks=x_positions, labels=station_labels, rotation=45, ha='right', fontsize=12)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
 
 # %%teste2
 def plot_amplification_for_stations(my_list, stations, field,limite_qualidade = 0, save_path=None, titulo="Sem Titulo"):
@@ -658,9 +828,12 @@ def plot_amplification_for_stations(my_list, stations, field,limite_qualidade = 
             std_value = np.nanstd(values)
             ax.axhline(y=mean_value, color=color, linestyle='-', linewidth=1, alpha=0.7,
                         label=f"Média = {mean_value:.2f}, Desvio Padrão = {std_value:.2f}")
-
+        if idx == 0:
+            y_label = label_map.get(field, field)
+            ax.set_ylabel(y_label, fontsize=14)
+        
         # Configurações do subplot atual
-        ax.set_ylabel(field, fontsize=14)
+        
         ax.set_title(f"{station}/{conjugada}  Total pontos: {total_data_points}", fontsize=16)
         ax.legend(fontsize=12)
         ax.grid(True)
@@ -684,7 +857,7 @@ def plot_amplification_for_stations(my_list, stations, field,limite_qualidade = 
     plt.show()
     
 # %%teste3
-def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo="Sem Titulo"):
+def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo="Sem Titulo",show=False):
     """
     Plota o campo especificado ao longo do tempo como barras para as estações especificadas,
     agrupando os dados por mês e criando gráficos separados em uma disposição vertical,
@@ -741,13 +914,16 @@ def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo=
         color = colors(idx)
 
         # Plota os dados do campo especificado agrupados por mês como barras para a estação
-        ax.bar(month_dates, values, color=color, alpha=1, width=20)  # Ajusta largura para visualização
+        bars = ax.bar(month_dates, values, color=color, alpha=1, width=20)  # Ajusta largura para visualização
 
         # Calcula a média e o desvio padrão dos dados
         all_values = [value for data in monthly_data.values() for value in data]
         if all_values:
             mean_value = np.nanmean(all_values)
             std_value = np.nanstd(all_values)
+            
+            # Adiciona a linha do zero
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
 
             # Adiciona a linha da média
             ax.axhline(y=mean_value, color='red', linestyle='--', linewidth=1.5, label=f"Média = {mean_value:.2f}")
@@ -757,10 +933,14 @@ def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo=
 
             # Adiciona legenda com a média e o desvio padrão
             ax.legend(fontsize=10, title=f"Desvio Padrão = {std_value:.2f}")
-
+            
+        if idx == 0:
+            y_label = label_map.get(field, field)
+            ax.set_ylabel(y_label, fontsize=14)
+            
         # Configurações específicas de cada gráfico
         ax.set_title(f"{station}/{conjugada} Total pontos:{total_data_points}", fontsize=14)
-        ax.set_ylabel(field, fontsize=12)
+
         # ax.grid(True, which='both', linewidth=0.7)  # Aumenta a resolução do grid, horizontal e vertical
 
         # Configura o formato do eixo x como meses no formato desejado e o intervalo mensal
@@ -773,7 +953,7 @@ def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo=
             ax.tick_params(labelbottom=False)  # Remove os rótulos dos ticks para os gráficos superiores
 
         # Define o limite do eixo Y
-        ax.set_ylim(0, 3)
+        ax.set_ylim(-3, 3)
         
         total_data_points = 0
 
@@ -781,6 +961,15 @@ def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo=
     plt.suptitle(titulo, fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
+    cursor = mplcursors.cursor(bars, hover=True)
+
+    @cursor.connect("add")
+    def on_add(sel):
+        x_val = sel.artist.get_x() + sel.artist.get_width() / 2
+        y_val = sel.artist.get_height()
+        label = sel.artist.get_label() if sel.artist.get_label() != '_nolegend_' else ''
+        sel.annotation.set(text=f"x: {x_val:.5f}\ny: {y_val:.5f}")
+    
     # Salva ou mostra o gráfico
     if save_path:
         plt.savefig(save_path)
