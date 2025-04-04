@@ -65,7 +65,7 @@ event_dates = get_events_dates(folder_path)
 # })
 
 
-# download_files(files_folder, event_dates['Data'], stations,duration = 1)
+download_files(files_folder, event_dates['Data'], stations,duration = 1)
 event_dates['Data'] = pd.to_datetime(event_dates['Data'])
 
 # %% testes
