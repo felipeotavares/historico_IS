@@ -38,17 +38,17 @@ estacoes_conjugadas = {
 #     'CBA': 'JAT',
 #     'CGR': 'BOA'
 # }
-estacoes_conjugadas = {
-    'SMS': 'SJG',
-    'ASC': 'GUI',
-    'GAN': 'ABG',
-    'KDU': 'KNY',
-    'KMH': 'AQU',
-    'ASP': 'KAK',
-    'GNA': 'MZL',
-    'SHE': 'STT',
-    'CBA': 'JAT'
-    }
+# estacoes_conjugadas = {
+#     'SMS': 'SJG',
+#     'ASC': 'GUI',
+#     'GAN': 'ABG',
+#     'KDU': 'KNY',
+#     'KMH': 'AQU',
+#     'ASP': 'KAK',
+#     'GNA': 'MZL',
+#     'SHE': 'STT',
+#     'CBA': 'JAT'
+#     }
 
 # estacoes_conjugadas = {
 #     'SMS': 'SJG'
@@ -76,7 +76,7 @@ event_dates = get_events_dates(folder_path)
 #     'Hora': [12]
 # })
 
-# download_files(files_folder, event_dates['Data'], stations,duration = 1)
+download_files(files_folder, event_dates['Data'], stations,duration = 1)
 event_dates['Data'] = pd.to_datetime(event_dates['Data'])
 
 # %% testes
@@ -170,6 +170,8 @@ plt.close('all')
 
 plot_variantes = ["Amplificacao","Amplificacao_dH_nT_abs", "Amplificacao_dH_nT_absacumulado","Amplificacao_H_nT_Pc5"]
 limite_qualidade=0  
+f107_data = get_filtered_solar_flux_data()
+
 
 for variant in plot_variantes:
     # plot_amplification_for_stations(my_list, stations, variant, titulo=campo, 
@@ -181,7 +183,8 @@ for variant in plot_variantes:
                                save_path=f'Resultados/{campo}_historico_{variant}_ano_barra_completo')
     plot_grouped_bars_by_month(my_list_filtered, stations, variant, titulo=campo, 
                                save_path=f'Resultados/{campo}_historico_{variant}_ano_barra_simultaneoQ{int(filtro_qualidade*100)}')
-    
+    plot_grouped_bars_with_f107(my_list, stations, variant,f107_data, titulo=campo, 
+                               save_path=f'Resultados/{campo}_historico_{variant}_ano_barra_completo_f10_7')
     # plot_bar_chart_for_stations(my_list_filtered, stations, variant, 
     #                             save_path=f'Resultados/{campo}_plot_bar_chart_for_stations_{variant}')
     # plot_bar_chart_for_stations(my_list, stations, variant, limite_qualidade=limite_qualidade, 

@@ -857,6 +857,79 @@ def plot_amplification_for_stations(my_list, stations, field,limite_qualidade = 
     plt.show()
     
 # %%teste3
+def plot_grouped_bars_with_f107(my_list, stations, field, f107_data, save_path=None, titulo="Sem Titulo", show=False):
+    """
+    Plota os índices geomagnéticos por estação agrupados por mês junto com o fluxo solar F10.7.
+    """
+    colors = cm.get_cmap("Accent", len(stations))
+    num_rows = len(stations) + 1  # +1 para o F10.7
+
+    fig, axes = plt.subplots(num_rows, 1, figsize=(16, 6 * num_rows), sharex=True)
+    if num_rows == 2:
+        axes = [axes[0], axes[1]]
+
+    # ---- PLOT DO F10.7 (TOPO) ----
+    ax_f107 = axes[0]
+    ax_f107.plot(f107_data["Date"], f107_data["SmoothedObsFlux"], label="F10.7 (média móvel 30d)", color="orange")
+    ax_f107.set_ylabel("Fluxo Solar F10.7 [sfu]", fontsize=12)
+    ax_f107.set_title("Fluxo Solar F10.7 Suavizado", fontsize=14)
+    ax_f107.grid(True)
+    ax_f107.legend()
+
+    # ---- PLOT DOS ÍNDICES POR ESTAÇÃO ----
+    for idx, station in enumerate(stations):
+        ax = axes[idx + 1]
+        station_data = [entry for entry in my_list if entry['Estacao'] == station]
+        monthly_data = defaultdict(list)
+
+        for entry in station_data:
+            date = pd.to_datetime(entry['DataHora'])
+            month_key = date.to_period('M')
+            monthly_data[month_key].append(entry[field])
+            conjugada = entry['Conjugada']
+
+        values = [np.nanmean(monthly_data[month]) for month in sorted(monthly_data.keys())]
+        month_dates = [month.to_timestamp() for month in sorted(monthly_data.keys())]
+
+        color = colors(idx)
+        bars = ax.bar(month_dates, values, color=color, alpha=1, width=20)
+
+        all_values = [value for data in monthly_data.values() for value in data]
+        if all_values:
+            mean_value = np.nanmean(all_values)
+            std_value = np.nanstd(all_values)
+            ax.axhline(y=0, color='black', linewidth=1)
+            ax.axhline(y=mean_value, color='red', linestyle='--', linewidth=1.5, label=f"Média = {mean_value:.2f}")
+            ax.axhline(y=1, color='blue', linestyle='-.', linewidth=1)
+            ax.legend(fontsize=10, title=f"Desvio Padrão = {std_value:.2f}")
+
+        ax.set_title(f"{station}/{conjugada}", fontsize=14)
+        ax.set_ylim(-3, 3)
+        if idx == len(stations) - 1:
+            ax.tick_params(axis='x', rotation=90)
+            ax.set_xlabel("Tempo (Meses)", fontsize=12)
+        else:
+            ax.tick_params(labelbottom=False)
+
+        ax.set_ylabel(field, fontsize=12)
+        cursor = mplcursors.cursor(bars, hover=True)
+
+        @cursor.connect("add")
+        def on_add(sel):
+            x_val = sel.artist.get_x() + sel.artist.get_width() / 2
+            y_val = sel.artist.get_height()
+            sel.annotation.set(text=f"x: {x_val:.2f}\ny: {y_val:.2f}")
+
+    # Ajustes finais
+    plt.suptitle(titulo, fontsize=18)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    if save_path:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+
+
 def plot_grouped_bars_by_month(my_list, stations, field, save_path=None, titulo="Sem Titulo",show=False):
     """
     Plota o campo especificado ao longo do tempo como barras para as estações especificadas,
