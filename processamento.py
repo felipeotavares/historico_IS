@@ -685,7 +685,8 @@ def get_date_selection(diretorio_base, event_dates, estacoes_conjugadas):
                         else:
                             elong = lon
                         D, I, H, X, Y, Z, F = pyIGRF.igrf_value(lat, elong, altitude, ano)
-
+                        print(f"{estacao} : {data_hora}")
+                       
                         dados_por_data.append({
                             'DataHora': data_hora,
                             'Hora': hora_decimal,
